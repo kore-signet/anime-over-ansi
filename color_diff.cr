@@ -57,7 +57,7 @@ class ColorMap
 
     (@color_map.map do |compare,ansi|
       cl, ca, cb = compare
-      {Math.sqrt(((l - cl) ** 2) + ((a - ca) ** 2) + ((b - cb) ** 2)),ansi}
+      {((l - cl) ** 2) + ((a - ca) ** 2) + ((b - cb) ** 2),ansi}
     end).to_a.sort_by { |a| a[0] }[0][1]
   end
 
