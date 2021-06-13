@@ -1,0 +1,22 @@
+name: telnet_anime
+version: 0.1.0
+dependencies:
+  stumpy_png:
+    github: stumpycr/stumpy_png
+    version: "~> 5.0"
+# authors:
+#   - name <email@example.com>
+
+# description: |
+#   Short description of telnet_anime
+
+# dependencies:
+#   pg:
+#     github: will/crystal-pg
+#     version: "~> 0.5"
+
+# development_dependencies:
+#   webmock:
+#     github: manastech/webmock.cr
+
+# license: MIT
