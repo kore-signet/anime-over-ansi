@@ -28,7 +28,7 @@ spawn do
   end
 end
 
-puts "buffering frames for 5s before starting"
+puts "pre-loading frames for 20s before starting"
 start = Time.monotonic
 while (Time.monotonic - start).total_seconds < 20.0
   buffered_frames.push File.read frames.pop
