@@ -6,6 +6,7 @@ use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufWriter;
+use std::process::Command;
 use std::path::PathBuf;
 
 fn main() -> std::io::Result<()> {
@@ -14,8 +15,8 @@ fn main() -> std::io::Result<()> {
         .author("allie signet <allie@cat-girl.gay>")
         .about("encodes video into ANSI escape sequences")
         .arg(
-            Arg::with_name("VIDEO_FOLDER")
-                .help("folder with the video's frames, as images, in it")
+            Arg::with_name("INPUT")
+                .help("file to read from")
                 .required(true)
                 .index(1),
         )
@@ -48,20 +49,6 @@ fn main() -> std::io::Result<()> {
                 .possible_values(&["nearest", "triangle", "gaussian", "lanczos"]),
         )
         .arg(
-            Arg::with_name("subtitles")
-                .help("subtitles to burn in")
-                .short("s")
-                .long("subtitles")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("framerate")
-                .help("if burning in subtitles, specify framerate to calculate intervals")
-                .short("r")
-                .long("fps")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("no_show_frames")
                 .help("don't show frames as they're encoded")
                 .long("no-show-frames"),
@@ -87,18 +74,17 @@ fn main() -> std::io::Result<()> {
     };
     let show_frames = !matches.is_present("no_show_frames");
 
-    let input_folder = matches.value_of("VIDEO_FOLDER").unwrap();
+    let input_file = matches.value_of("INPUT").unwrap();
     let out_file = matches.value_of("OUT").unwrap();
 
-    let mut entries: Vec<PathBuf> = fs::read_dir(input_folder)
-        .expect("couldn't read input folder")
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().unwrap_or(OsStr::new("no")) == "png")
-        .collect();
+    let frames_out = Command::new("ffprobe")
+                                .args(&["-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", input_file])
+                                .output()
+                                .expect("couldn't count frames with ffprobe");
 
-    entries.sort();
+    let frame_quant_s = String::from_utf8(frames_out.stdout).unwrap();
+    let frame_quant = frame_quant_s.trim_end().parse::<u64>().expect("couldn't parse frame number as unsigned integer");
 
-    let frame_quant = entries.len();
     let cursor_pos = if show_frames { height } else { 2 };
 
     let out_fs = File::create(out_file).unwrap();
@@ -106,7 +92,8 @@ fn main() -> std::io::Result<()> {
 
     print!("\x1B[2J\x1B[1;1H");
 
-    for (i, file_path) in entries.into_iter().enumerate() {
+    for i in 0..frame_quant {
+
         let percent_done = ((i + 1) as f64 / frame_quant as f64) * 100.0;
 
         print!("\x1B[{};1H", cursor_pos);
@@ -117,7 +104,13 @@ fn main() -> std::io::Result<()> {
             i + 1,
             frame_quant
         );
-        let mut img = image::open(file_path).unwrap().into_rgb8();
+
+        let frame_out = Command::new("ffmpeg")
+                                .args(&["-i", input_file, "-vf", &format!("select=eq(n\\,{})",i), "-vframes", "1", "-c:v", "png", "-f", "image2pipe", "-"])
+                                .output()
+                                .expect("couldn't extract frame with ffmpeg");
+
+        let mut img = image::load_from_memory_with_format(&frame_out.stdout, image::ImageFormat::Png).expect("couldn't load image").into_rgb8();
         img = imageops::resize(&img, width, height, resize_filter);
 
         print!("\x1B[{};1H", cursor_pos);
