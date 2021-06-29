@@ -1,13 +1,13 @@
 use anime_telnet::*;
 use clap::Arg;
 use image::imageops;
-use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufWriter;
-use std::process::Command;
-use std::path::PathBuf;
+
+use opencv::videoio::{VideoCaptureProperties,VideoCaptureTrait,VideoCapture};
+use opencv::core::{Mat,Vector};
 
 fn main() -> std::io::Result<()> {
     let matches = clap::App::new("anime over telnet encoder")
@@ -77,24 +77,22 @@ fn main() -> std::io::Result<()> {
     let input_file = matches.value_of("INPUT").unwrap();
     let out_file = matches.value_of("OUT").unwrap();
 
-    let frames_out = Command::new("ffprobe")
-                                .args(&["-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", input_file])
-                                .output()
-                                .expect("couldn't count frames with ffprobe");
-
-    let frame_quant_s = String::from_utf8(frames_out.stdout).unwrap();
-    let frame_quant = frame_quant_s.trim_end().parse::<u64>().expect("couldn't parse frame number as unsigned integer");
+    let mut video_cap = VideoCapture::from_file(input_file, 0).expect("couldn't open video file");
+    let frame_quant = video_cap.get(VideoCaptureProperties::CAP_PROP_FRAME_COUNT as i32).expect("couldn't get frame count of video") as u64;
 
     let cursor_pos = if show_frames { height } else { 2 };
 
     let out_fs = File::create(out_file).unwrap();
     let mut out = BufWriter::new(out_fs);
 
+    let mut mat = Mat::default();
+    let mut buffer: Vector<u8> = Vector::new();
+
     print!("\x1B[2J\x1B[1;1H");
 
     for i in 0..frame_quant {
-
         let percent_done = ((i + 1) as f64 / frame_quant as f64) * 100.0;
+
 
         print!("\x1B[{};1H", cursor_pos);
         print!("\x1B[2K");
@@ -105,12 +103,14 @@ fn main() -> std::io::Result<()> {
             frame_quant
         );
 
-        let frame_out = Command::new("ffmpeg")
-                                .args(&["-i", input_file, "-vf", &format!("select=eq(n\\,{})",i), "-vframes", "1", "-c:v", "png", "-f", "image2pipe", "-"])
-                                .output()
-                                .expect("couldn't extract frame with ffmpeg");
 
-        let mut img = image::load_from_memory_with_format(&frame_out.stdout, image::ImageFormat::Png).expect("couldn't load image").into_rgb8();
+        let read_frame = video_cap.read(&mut mat).unwrap();
+        if !read_frame {
+            break;
+        }
+
+        opencv::imgcodecs::imencode(".png", &mat, &mut buffer, &Vector::new()).unwrap();
+        let mut img = image::load_from_memory_with_format(&buffer.to_vec(), image::ImageFormat::Png).expect("couldn't load image").into_rgb8();
         img = imageops::resize(&img, width, height, resize_filter);
 
         print!("\x1B[{};1H", cursor_pos);
@@ -121,6 +121,7 @@ fn main() -> std::io::Result<()> {
             i + 1,
             frame_quant
         );
+
         imageops::dither(&mut img, &LABAnsiColorMap);
 
         let frame = encode(img);
