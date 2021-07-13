@@ -31,7 +31,6 @@ dependencies = [
  "image",
  "lazy_static",
  "opencv",
- "rayon",
  "srtlib",
 ]
 

@@ -63,7 +63,6 @@ where
         i += 1;
 
         let sleep_for = interval.checked_sub(last.elapsed());
-        last = Instant::now();
 
         if let Some(sl) = sleep_for {
             std::thread::sleep(sl);

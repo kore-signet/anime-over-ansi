@@ -1,6 +1,5 @@
 use crate::palette::*;
 use lazy_static::lazy_static;
-use rayon::prelude::*;
 
 // D65 standard illuminant refs
 static REF_X: f64 = 95.047;
@@ -26,7 +25,7 @@ pub fn closest_ansi(r: u8, g: u8, b: u8) -> u8 {
     let (l, a, b) = xyz_to_lab(x, y, z);
 
     *(LAB_PALETTE
-        .par_iter()
+        .iter()
         .map(|(idx, p_l, p_a, p_b)| {
             (
                 idx,
