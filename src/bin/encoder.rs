@@ -1,12 +1,12 @@
 use anime_telnet::*;
 use clap::Arg;
 use image::imageops;
+use opencv::core::{Mat, Vector};
+use opencv::videoio::{VideoCapture, VideoCaptureProperties, VideoCaptureTrait};
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufWriter;
-use opencv::videoio::{VideoCaptureProperties,VideoCaptureTrait,VideoCapture};
-use opencv::core::{Mat,Vector};
 use std::time::Instant;
 
 fn main() -> std::io::Result<()> {
@@ -48,6 +48,14 @@ fn main() -> std::io::Result<()> {
                 .possible_values(&["nearest", "triangle", "gaussian", "lanczos"]),
         )
         .arg(
+            Arg::with_name("color_mode")
+                .help("ANSI color mode to use (defaults to 256color)")
+                .short("c")
+                .long("color")
+                .takes_value(true)
+                .possible_values(&["256color", "truecolor"]),
+        )
+        .arg(
             Arg::with_name("no_show_frames")
                 .help("don't show frames as they're encoded")
                 .long("no-show-frames"),
@@ -70,6 +78,7 @@ fn main() -> std::io::Result<()> {
         .unwrap_or("108")
         .parse::<u32>()
         .expect("please specify a valid number for the height ><");
+    let color_mode = matches.value_of("color_mode").unwrap_or("256color");
     let resize_filter = match matches.value_of("resize").unwrap_or("triangle") {
         "nearest" => imageops::FilterType::Nearest,
         "triangle" => imageops::FilterType::Triangle,
@@ -101,7 +110,7 @@ fn main() -> std::io::Result<()> {
             if live_mode {
                 0_u64
             } else {
-                panic!("couldn't get video frame count: {}",e)
+                panic!("couldn't get video frame count: {}", e)
             }
         }
     };
@@ -141,7 +150,10 @@ fn main() -> std::io::Result<()> {
         }
 
         opencv::imgcodecs::imencode(".png", &mat, &mut buffer, &Vector::new()).unwrap();
-        let mut img = image::load_from_memory_with_format(&buffer.to_vec(), image::ImageFormat::Png).expect("couldn't load image").into_rgb8();
+        let mut img =
+            image::load_from_memory_with_format(&buffer.to_vec(), image::ImageFormat::Png)
+                .expect("couldn't load image")
+                .into_rgb8();
 
         img = imageops::resize(&img, width, height, resize_filter);
 
@@ -156,9 +168,11 @@ fn main() -> std::io::Result<()> {
             );
         }
 
-        imageops::dither(&mut img, &LABAnsiColorMap);
+        if color_mode == "256color" {
+            imageops::dither(&mut img, &LABAnsiColorMap);
+        }
 
-        let frame = encode(img);
+        let frame = encode(img, color_mode);
 
         if show_frames {
             print!("\x1B[1;1H");

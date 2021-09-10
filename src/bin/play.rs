@@ -1,8 +1,7 @@
-use srtlib::{Subtitles};
+use srtlib::Subtitles;
 use std::fs::File;
-use std::io::{BufReader, self};
+use std::io::{self, BufReader};
 use std::sync::RwLock;
-
 
 use clap::Arg;
 

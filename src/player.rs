@@ -1,5 +1,5 @@
-use srtlib::{Subtitle};
-use std::io::{BufRead,Write};
+use srtlib::Subtitle;
+use std::io::{BufRead, Write};
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
@@ -13,7 +13,6 @@ where
     T: BufRead,
     U: Write,
 {
-
     let interval_micros = (1000000.0 / framerate) as u64;
     let interval = Duration::from_micros(interval_micros);
 
@@ -49,7 +48,11 @@ where
             let current = Duration::from_micros((i as u64 * interval_micros) as u64);
 
             if current >= start_time {
-                write!(&mut dest, "\x1B[0m\x1B[0J{}", &next_s.text.replace("\n", " "))?;
+                write!(
+                    &mut dest,
+                    "\x1B[0m\x1B[0J{}",
+                    &next_s.text.replace("\n", " ")
+                )?;
             }
 
             let (eh, em, es, ems) = next_s.end_time.get();
@@ -67,6 +70,8 @@ where
         if let Some(sl) = sleep_for {
             std::thread::sleep(sl);
         }
+        
+        last = Instant::now();
     }
 
     Ok(())
