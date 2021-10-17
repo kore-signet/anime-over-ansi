@@ -11,6 +11,10 @@ image = "0.23.14"
 clap = "2.33.3"
 srtlib = "0.1"
 opencv = "0.53.0"
+rayon = "*"
+crossbeam-channel = "0.5.1"
+crossbeam-utils = "*"
+multiqueue2 = "*"
 
 [[bin]]
 name = "player"
@@ -19,3 +23,7 @@ path = "src/bin/play.rs"
 [[bin]]
 name = "encoder"
 path = "src/bin/encoder.rs"
+
+[[bin]]
+name = "test"
+path = "src/bin/test.rs"

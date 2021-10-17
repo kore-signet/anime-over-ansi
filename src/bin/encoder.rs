@@ -3,11 +3,11 @@ use clap::Arg;
 use image::imageops;
 use opencv::core::{Mat, Vector};
 use opencv::videoio::{VideoCapture, VideoCaptureProperties, VideoCaptureTrait};
-use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufWriter;
-use std::time::Instant;
+use std::thread;
+use std::net::*;
 
 fn main() -> std::io::Result<()> {
     let matches = clap::App::new("anime over telnet encoder")
@@ -54,6 +54,12 @@ fn main() -> std::io::Result<()> {
                 .long("color")
                 .takes_value(true)
                 .possible_values(&["256color", "truecolor"]),
+        )
+        .arg(
+            Arg::with_name("bind_address")
+                .help("listen on a port, sending encoded video")
+                .takes_value(true)
+                .long("bind")
         )
         .arg(
             Arg::with_name("no_show_frames")
@@ -124,6 +130,28 @@ fn main() -> std::io::Result<()> {
     let mut buffer: Vector<u8> = Vector::new();
     let mut i: u64 = 0;
 
+    let (send, recv) = multiqueue2::broadcast_queue::<String>(20);
+
+    let server_t = if let Some(addr) = matches.value_of("bind_address").map(|s|s.to_string()) {
+        let cur_recv = recv.add_stream();
+        thread::spawn(move || {
+            let listener = TcpListener::bind(addr).unwrap();
+            for stream in listener.incoming() {
+                let consumer = cur_recv.clone();
+                let mut stream = stream.unwrap();
+                thread::spawn(move || {
+                    for msg in consumer {
+                        stream.write_all(&msg.as_bytes()).unwrap();
+                    }
+                });
+            }
+        })
+    } else {
+        thread::spawn(||{})
+    };
+
+    recv.unsubscribe();
+
     print!("\x1B[2J\x1B[1;1H");
 
     loop {
@@ -175,9 +203,9 @@ fn main() -> std::io::Result<()> {
         let frame = encode(img, color_mode);
 
         if show_frames {
-            print!("\x1B[1;1H");
-            print!("{}", &frame);
-            print!("\x1B[0m");
+            let s = format!("\x1B[1;1H{}\x1b[0m", &frame);
+            print!("{}",s);
+            send.try_send(s).unwrap();
         }
 
         if !live_mode {
@@ -189,6 +217,9 @@ fn main() -> std::io::Result<()> {
             i += 1;
         }
     }
+
+    drop(send);
+    server_t.join();
 
     Ok(())
 }
