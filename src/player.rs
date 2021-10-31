@@ -70,7 +70,7 @@ where
         if let Some(sl) = sleep_for {
             std::thread::sleep(sl);
         }
-        
+
         last = Instant::now();
     }
 

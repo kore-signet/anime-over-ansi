@@ -6,7 +6,7 @@ use std::sync::RwLock;
 use clap::Arg;
 
 fn main() -> io::Result<()> {
-    let matches = clap::App::new("anime over telnet player")
+    let matches = clap::App::new("ansi.moe player")
         .version("1.0")
         .author("allie signet <allie@cat-girl.gay>")
         .about("plays encoded video")
@@ -56,7 +56,7 @@ fn main() -> io::Result<()> {
     let stdout_handle = stdout.lock();
     let stdout_lock = RwLock::new(stdout_handle);
 
-    anime_telnet::play(&mut reader, framerate, &mut subtitles, &stdout_lock)?;
+    anime_telnet::player::play(&mut reader, framerate, &mut subtitles, &stdout_lock)?;
 
     Ok(())
 }
