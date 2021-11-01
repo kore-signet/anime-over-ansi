@@ -7,7 +7,10 @@ use opencv::videoio::{VideoCapture, VideoCaptureProperties, VideoCaptureTrait};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, prelude::*, BufWriter};
+use std::path::Path;
 use std::time::SystemTime;
+
+use indicatif::{ProgressBar, ProgressStyle};
 use tempfile::tempfile;
 
 // gets and removes value from hashmap for whichever one of the keys exists in it
@@ -199,6 +202,43 @@ fn main() -> std::io::Result<()> {
         })
         .collect();
 
+    let subtitle_tracks: Vec<(File, SubtitleTrack)> = matches
+        .values_of("subtitle_track")
+        .unwrap()
+        .map(|cfg| {
+            let mut map: HashMap<String, String> = cfg
+                .split_terminator(',')
+                .map(|line| {
+                    line.split_once(':')
+                        .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                        .unwrap()
+                })
+                .collect();
+
+            let file_name = one_of_keys(&mut map, vec!["source", "file", "f"])
+                .expect("please specify a subtitle file!");
+            let mut sfile = File::open(&file_name).unwrap();
+            let s_len = sfile.metadata().unwrap().len();
+            let mut contents: Vec<u8> = Vec::with_capacity(s_len as usize);
+            sfile.read_to_end(&mut contents).unwrap();
+            sfile.rewind().unwrap();
+
+            let format =
+                subparse::get_subtitle_format(Path::new(&file_name).extension(), &contents)
+                    .expect("couldn't guess subtitle format");
+            (
+                sfile,
+                SubtitleTrack {
+                    name: one_of_keys(&mut map, vec!["name", "n", "title"]),
+                    lang: one_of_keys(&mut map, vec!["lang"]),
+                    format: format,
+                    offset: 0,
+                    length: s_len,
+                },
+            )
+        })
+        .collect();
+
     let resize_filter = match matches.value_of("resize").unwrap_or("triangle") {
         "nearest" => imageops::FilterType::Nearest,
         "triangle" => imageops::FilterType::Triangle,
@@ -226,28 +266,15 @@ fn main() -> std::io::Result<()> {
         })
         .collect();
 
-    let cursor_pos = 2;
-
     let mut mat = Mat::default();
     let mut buffer: Vector<u8> = Vector::new();
-    let mut i: u64 = 0;
-
-    print!("\x1B[2J\x1B[1;1H");
-    io::stdout().flush().unwrap();
+    let encoder_bar = ProgressBar::new(frame_quant as u64);
+    encoder_bar.set_style(
+        ProgressStyle::default_bar()
+            .template("{percent}% done, encoding frame {pos} out of {len}\n{bar:40.green/white}"),
+    );
 
     loop {
-        let percent_done = ((i + 1) as f64 / frame_quant as f64) * 100.0;
-
-        print!("\x1B[{};1H", cursor_pos);
-        print!("\x1B[2K");
-        print!(
-            "{:.2}% | Processing frame #{}/{} | reading, resizing",
-            percent_done,
-            i + 1,
-            frame_quant
-        );
-        io::stdout().flush().unwrap();
-
         let read_frame = video_cap.read(&mut mat).unwrap();
         if !read_frame {
             break;
@@ -261,16 +288,6 @@ fn main() -> std::io::Result<()> {
         for pipeline in resize_pipelines.values_mut() {
             pipeline.resize(&img);
         }
-
-        print!("\x1B[{};1H", cursor_pos);
-        print!("\x1B[2K");
-        print!(
-            "{:.2}% | Processing frame #{}/{} | dithering",
-            percent_done,
-            i + 1,
-            frame_quant
-        );
-        io::stdout().flush().unwrap();
 
         for (encoder, _) in video_tracks.iter_mut() {
             if encoder.needs_color == ColorMode::EightBit {
@@ -288,12 +305,15 @@ fn main() -> std::io::Result<()> {
             }
         }
 
-        i += 1;
+        encoder_bar.inc(1);
     }
+
+    encoder_bar.finish();
 
     let mut track_position = 0;
     let mut track_files: Vec<File> = Vec::new();
     let mut done_tracks: Vec<VideoTrack> = Vec::new();
+    let mut done_subtitles: Vec<SubtitleTrack> = Vec::new();
 
     for (encoder, mut track) in video_tracks {
         let (frame_lengths, mut file) = encoder.finish().unwrap();
@@ -311,7 +331,19 @@ fn main() -> std::io::Result<()> {
         done_tracks.push(track);
     }
 
-    let metadata_bytes = serde_json::to_vec(&done_tracks).unwrap();
+    for (file, mut track) in subtitle_tracks {
+        track.offset = track_position;
+        track_position += track.length;
+
+        track_files.push(file);
+        done_subtitles.push(track)
+    }
+
+    let metadata_bytes = serde_json::to_vec(&VideoMetadata {
+        video_tracks: done_tracks,
+        subtitle_tracks: done_subtitles,
+    })
+    .unwrap();
     out_writer
         .write_all(&(metadata_bytes.len() as u64).to_be_bytes())
         .unwrap();

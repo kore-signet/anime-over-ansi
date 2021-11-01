@@ -38,7 +38,7 @@ pub struct VideoTrack {
     pub frame_lengths: Vec<u64>, // length of every frame
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SubtitleTrack {
     pub name: Option<String>,
     pub lang: Option<String>,
@@ -46,4 +46,10 @@ pub struct SubtitleTrack {
     pub format: SubtitleFormat, // format for the subtitles
     pub offset: u64, // position in file at which it starts
     pub length: u64, // position in file at which it ends,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct VideoMetadata {
+    pub video_tracks: Vec<VideoTrack>,
+    pub subtitle_tracks: Vec<SubtitleTrack>,
 }
