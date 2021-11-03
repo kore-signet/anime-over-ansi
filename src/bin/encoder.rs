@@ -5,7 +5,8 @@ use opencv::videoio::{
     VideoCapture, VideoCaptureProperties, VideoCaptureTrait, VideoCaptureTraitConst,
 };
 
-use image::{buffer::ConvertBuffer, Bgr, ImageBuffer, RgbaImage};
+use crossbeam::channel::unbounded;
+use image::{RgbImage, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -71,6 +72,8 @@ fn main() -> std::io::Result<()> {
                                 "title",
                                 "n",
                                 "compression",
+                                "zstd-level",
+                                "compression-level",
                             ]
                             .contains(&k)
                             {
@@ -162,6 +165,9 @@ fn main() -> std::io::Result<()> {
                 .map(|h| h.parse::<u32>().expect("invalid number for width"))
                 .unwrap_or(192);
 
+            let compression_level = one_of_keys(&mut map, vec!["compression-level", "zstd-level"])
+                .and_then(|v| v.parse::<i32>().ok());
+
             let compression = map
                 .remove("compression")
                 .map(|c| match c.as_str() {
@@ -183,7 +189,9 @@ fn main() -> std::io::Result<()> {
                         let file = tempfile().unwrap();
                         if compression == CompressionMode::Zstd {
                             OutputStream::CompressedFile({
-                                let mut encoder = zstd::Encoder::new(file, 3).unwrap(); // todo: configurable compression level
+                                let mut encoder =
+                                    zstd::Encoder::new(file, compression_level.unwrap_or(3))
+                                        .unwrap();
                                 encoder.long_distance_matching(true).unwrap();
                                 encoder
                             })
@@ -282,55 +290,81 @@ fn main() -> std::io::Result<()> {
                 height: e.needs_height,
                 filter: resize_filter,
                 color_modes: HashSet::new(),
-                last_frames: HashMap::new(),
             })
             .color_modes
             .insert(e.needs_color);
     }
 
     let mut mat = Mat::default();
+    let mut rgb_mat = Mat::default();
 
     let encoder_bar = ProgressBar::new(frame_quant as u64);
     encoder_bar.set_style(
         ProgressStyle::default_bar()
-            .template("{per_sec:5!}fps - {percent}% done, encoding frame {pos} out of {len}\n{bar:40.green/white}"),
+            .template("{per_sec:5!}fps, ETA {eta} - {percent}% done, encoding frame {pos} out of {len}\n{bar:40.green/white}"),
     );
 
     let mut buffer = Vector::<u8>::with_capacity((video_width * video_height * 3) as usize);
 
-    loop {
-        let read_frame = video_cap.read(&mut mat).unwrap();
-        if !read_frame {
-            break;
-        }
-
-        mat.reshape(1, 1).unwrap().copy_to(&mut buffer).unwrap();
-
-        let img: RgbaImage = ImageBuffer::<Bgr<u8>, Vec<u8>>::from_raw(
-            video_width as u32,
-            video_height as u32,
-            buffer.to_vec(),
-        )
-        .unwrap()
-        .convert();
-
-        for pipeline in processor_pipeline.values_mut() {
-            pipeline.process(&img);
-        }
-
-        for (encoder, _) in video_tracks.iter_mut() {
-            encoder
-                .encode_frame(
-                    processor_pipeline[&(encoder.needs_width, encoder.needs_height)]
-                        .last_frame(&encoder.needs_color),
+    let (snd, rcv) = unbounded();
+    crossbeam::scope(|s| {
+        s.spawn(|_| {
+            while video_cap.read(&mut mat).unwrap() {
+                opencv::imgproc::cvt_color(
+                    &mat,
+                    &mut rgb_mat,
+                    opencv::imgproc::ColorConversionCodes::COLOR_BGR2RGBA as i32,
+                    0,
                 )
                 .unwrap();
+
+                rgb_mat.reshape(1, 1).unwrap().copy_to(&mut buffer).unwrap();
+
+                let img: RgbaImage =
+                    RgbaImage::from_raw(video_width as u32, video_height as u32, buffer.to_vec())
+                        .unwrap();
+
+                snd.send(
+                    processor_pipeline
+                        .iter()
+                        .flat_map(|(_, p)| {
+                            p.process(&img)
+                                .into_iter()
+                                .map(move |r| (p.width, p.height, r.0, r.1))
+                        })
+                        .collect::<Vec<(u32, u32, ColorMode, RgbImage)>>(),
+                )
+                .unwrap();
+            }
+
+            drop(snd);
+        });
+
+        for msg in rcv.iter() {
+            for (encoder, _) in video_tracks.iter_mut() {
+                encoder
+                    .encode_frame(
+                        &msg[msg
+                            .iter()
+                            .position(|v| {
+                                v.0 == encoder.needs_width
+                                    && v.1 == encoder.needs_height
+                                    && v.2 == encoder.needs_color
+                            })
+                            .unwrap()]
+                        .3,
+                    )
+                    .unwrap();
+            }
+
+            encoder_bar.inc(1);
         }
 
-        encoder_bar.inc(1);
-    }
+        encoder_bar.finish();
+    })
+    .unwrap();
 
-    encoder_bar.finish();
+    println!("writing finished file..");
 
     let mut track_position = 0;
     let mut track_files: Vec<File> = Vec::new();

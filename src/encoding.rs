@@ -8,7 +8,7 @@ use image::{
     imageops::{self},
     Rgb, RgbImage, RgbaImage,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Write};
 use std::num::NonZeroU32;
@@ -116,11 +116,10 @@ pub struct ProcessorPipeline {
     pub width: u32,
     pub height: u32,
     pub color_modes: HashSet<ColorMode>,
-    pub last_frames: HashMap<ColorMode, RgbImage>,
 }
 
 impl ProcessorPipeline {
-    pub fn process(&mut self, img: &RgbaImage) {
+    pub fn process(&self, img: &RgbaImage) -> Vec<(ColorMode, RgbImage)> {
         let src_image = fr::Image::from_vec_u8(
             NonZeroU32::new(img.width()).unwrap(),
             NonZeroU32::new(img.height()).unwrap(),
@@ -143,26 +142,18 @@ impl ProcessorPipeline {
                 .unwrap()
                 .convert();
 
+        let mut res = Vec::with_capacity(self.color_modes.len());
+
         for mode in &self.color_modes {
             if mode == &ColorMode::EightBit {
                 let mut dframe = frame.clone();
                 imageops::dither(&mut dframe, &LABAnsiColorMap);
-                if self.last_frames.contains_key(mode) {
-                    *self.last_frames.get_mut(mode).unwrap() = dframe;
-                } else {
-                    self.last_frames.insert(*mode, dframe);
-                }
+                res.push((*mode, dframe));
             } else {
-                if self.last_frames.contains_key(mode) {
-                    *self.last_frames.get_mut(mode).unwrap() = frame.clone();
-                } else {
-                    self.last_frames.insert(*mode, frame.clone());
-                }
+                res.push((*mode, frame.clone()));
             }
         }
-    }
 
-    pub fn last_frame(&self, mode: &ColorMode) -> &RgbImage {
-        &self.last_frames[mode]
+        res
     }
 }
