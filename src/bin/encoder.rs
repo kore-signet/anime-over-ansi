@@ -1,16 +1,20 @@
-use anime_telnet::{encoding::*, metadata::*, palette::LABAnsiColorMap};
+use anime_telnet::{encoding::*, metadata::*};
 use clap::Arg;
-use image::imageops;
-use opencv::core::{Mat, Vector};
-use opencv::videoio::{VideoCapture, VideoCaptureProperties, VideoCaptureTrait};
+use opencv::core::{Mat, MatTraitConst, Vector};
+use opencv::videoio::{
+    VideoCapture, VideoCaptureProperties, VideoCaptureTrait, VideoCaptureTraitConst,
+};
 
-use std::collections::HashMap;
+use image::{buffer::ConvertBuffer, Bgr, ImageBuffer, RgbaImage};
+use indicatif::{ProgressBar, ProgressStyle};
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, prelude::*, BufWriter};
 use std::path::Path;
 use std::time::SystemTime;
 
-use indicatif::{ProgressBar, ProgressStyle};
+use fast_image_resize as fr;
+
 use tempfile::tempfile;
 
 // gets and removes value from hashmap for whichever one of the keys exists in it
@@ -109,7 +113,14 @@ fn main() -> std::io::Result<()> {
                 .help("resizing algorithm to use")
                 .long("resize")
                 .takes_value(true)
-                .possible_values(&["nearest", "triangle", "gaussian", "lanczos"]),
+                .possible_values(&[
+                    "nearest",
+                    "hamming",
+                    "catmullrom",
+                    "mitchell",
+                    "lanczos",
+                    "bilinear",
+                ]),
         )
         .get_matches();
 
@@ -239,40 +250,53 @@ fn main() -> std::io::Result<()> {
         })
         .collect();
 
-    let resize_filter = match matches.value_of("resize").unwrap_or("triangle") {
-        "nearest" => imageops::FilterType::Nearest,
-        "triangle" => imageops::FilterType::Triangle,
-        "gaussian" => imageops::FilterType::Gaussian,
-        "lanczos" => imageops::FilterType::Lanczos3,
-        _ => imageops::FilterType::Triangle,
+    let resize_filter = match matches.value_of("resize").unwrap_or("hamming") {
+        "nearest" => fr::FilterType::Box,
+        "bilinear" => fr::FilterType::Bilinear,
+        "hamming" => fr::FilterType::Hamming,
+        "catmullrom" => fr::FilterType::CatmullRom,
+        "mitchell" => fr::FilterType::Mitchell,
+        "lanczos" => fr::FilterType::Lanczos3,
+        _ => fr::FilterType::Hamming,
     };
 
     let frame_quant = video_cap
         .get(VideoCaptureProperties::CAP_PROP_FRAME_COUNT as i32)
         .unwrap();
 
-    let mut resize_pipelines: HashMap<(u32, u32), ResizePipeline> = video_tracks
-        .iter()
-        .map(|(e, _)| {
-            (
-                (e.needs_width, e.needs_height),
-                ResizePipeline {
-                    width: e.needs_width,
-                    height: e.needs_height,
-                    filter: resize_filter,
-                    last_frame: None,
-                },
-            )
-        })
-        .collect();
+    let video_width = video_cap
+        .get(VideoCaptureProperties::CAP_PROP_FRAME_WIDTH as i32)
+        .unwrap() as i32;
+
+    let video_height = video_cap
+        .get(VideoCaptureProperties::CAP_PROP_FRAME_HEIGHT as i32)
+        .unwrap() as i32;
+
+    let mut processor_pipeline: HashMap<(u32, u32), ProcessorPipeline> = HashMap::new();
+
+    for (e, _) in video_tracks.iter() {
+        processor_pipeline
+            .entry((e.needs_width, e.needs_height))
+            .or_insert(ProcessorPipeline {
+                width: e.needs_width,
+                height: e.needs_height,
+                filter: resize_filter,
+                color_modes: HashSet::new(),
+                last_frames: HashMap::new(),
+            })
+            .color_modes
+            .insert(e.needs_color);
+    }
 
     let mut mat = Mat::default();
-    let mut buffer: Vector<u8> = Vector::new();
+
     let encoder_bar = ProgressBar::new(frame_quant as u64);
     encoder_bar.set_style(
         ProgressStyle::default_bar()
-            .template("{percent}% done, encoding frame {pos} out of {len}\n{bar:40.green/white}"),
+            .template("{per_sec:5!}fps - {percent}% done, encoding frame {pos} out of {len}\n{bar:40.green/white}"),
     );
+
+    let mut buffer = Vector::<u8>::with_capacity((video_width * video_height * 3) as usize);
 
     loop {
         let read_frame = video_cap.read(&mut mat).unwrap();
@@ -280,29 +304,27 @@ fn main() -> std::io::Result<()> {
             break;
         }
 
-        opencv::imgcodecs::imencode(".png", &mat, &mut buffer, &Vector::new()).unwrap();
-        let img = image::load_from_memory_with_format(&buffer.to_vec(), image::ImageFormat::Png)
-            .expect("couldn't load image")
-            .into_rgb8();
+        mat.reshape(1, 1).unwrap().copy_to(&mut buffer).unwrap();
 
-        for pipeline in resize_pipelines.values_mut() {
-            pipeline.resize(&img);
+        let img: RgbaImage = ImageBuffer::<Bgr<u8>, Vec<u8>>::from_raw(
+            video_width as u32,
+            video_height as u32,
+            buffer.to_vec(),
+        )
+        .unwrap()
+        .convert();
+
+        for pipeline in processor_pipeline.values_mut() {
+            pipeline.process(&img);
         }
 
         for (encoder, _) in video_tracks.iter_mut() {
-            if encoder.needs_color == ColorMode::EightBit {
-                let mut frame = resize_pipelines[&(encoder.needs_width, encoder.needs_height)]
-                    .last_frame()
-                    .clone();
-                imageops::dither(&mut frame, &LABAnsiColorMap);
-                encoder.encode_frame(&frame).unwrap();
-            } else {
-                encoder
-                    .encode_frame(
-                        resize_pipelines[&(encoder.needs_width, encoder.needs_height)].last_frame(),
-                    )
-                    .unwrap();
-            }
+            encoder
+                .encode_frame(
+                    processor_pipeline[&(encoder.needs_width, encoder.needs_height)]
+                        .last_frame(&encoder.needs_color),
+                )
+                .unwrap();
         }
 
         encoder_bar.inc(1);

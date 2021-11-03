@@ -1,10 +1,17 @@
-use super::{metadata::ColorMode, palette::REVERSE_PALETTE};
-use image::{
-    imageops::{self},
-    Rgb, RgbImage,
+use super::{
+    metadata::ColorMode,
+    palette::{LABAnsiColorMap, REVERSE_PALETTE},
 };
+use fast_image_resize as fr;
+use image::{
+    buffer::ConvertBuffer,
+    imageops::{self},
+    Rgb, RgbImage, RgbaImage,
+};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{self, Write};
+use std::num::NonZeroU32;
 
 pub enum OutputStream<'a> {
     File(fs::File),
@@ -104,19 +111,58 @@ impl Encoder<'_> {
     }
 }
 
-pub struct ResizePipeline {
-    pub filter: imageops::FilterType,
+pub struct ProcessorPipeline {
+    pub filter: fr::FilterType,
     pub width: u32,
     pub height: u32,
-    pub last_frame: Option<RgbImage>,
+    pub color_modes: HashSet<ColorMode>,
+    pub last_frames: HashMap<ColorMode, RgbImage>,
 }
 
-impl ResizePipeline {
-    pub fn resize(&mut self, img: &RgbImage) {
-        self.last_frame = Some(imageops::resize(img, self.width, self.height, self.filter));
+impl ProcessorPipeline {
+    pub fn process(&mut self, img: &RgbaImage) {
+        let src_image = fr::Image::from_vec_u8(
+            NonZeroU32::new(img.width()).unwrap(),
+            NonZeroU32::new(img.height()).unwrap(),
+            img.clone().into_raw(),
+            fr::PixelType::U8x4,
+        )
+        .unwrap();
+
+        let mut dst_image = fr::Image::new(
+            NonZeroU32::new(self.width).unwrap(),
+            NonZeroU32::new(self.height).unwrap(),
+            src_image.pixel_type(),
+        );
+        let mut dst_view = dst_image.view_mut();
+        let mut resizer = fr::Resizer::new(fr::ResizeAlg::Convolution(fr::FilterType::Lanczos3));
+        resizer.resize(&src_image.view(), &mut dst_view).unwrap();
+
+        let frame: RgbImage =
+            RgbaImage::from_raw(self.width, self.height, dst_image.buffer().to_vec())
+                .unwrap()
+                .convert();
+
+        for mode in &self.color_modes {
+            if mode == &ColorMode::EightBit {
+                let mut dframe = frame.clone();
+                imageops::dither(&mut dframe, &LABAnsiColorMap);
+                if self.last_frames.contains_key(mode) {
+                    *self.last_frames.get_mut(mode).unwrap() = dframe;
+                } else {
+                    self.last_frames.insert(*mode, dframe);
+                }
+            } else {
+                if self.last_frames.contains_key(mode) {
+                    *self.last_frames.get_mut(mode).unwrap() = frame.clone();
+                } else {
+                    self.last_frames.insert(*mode, frame.clone());
+                }
+            }
+        }
     }
 
-    pub fn last_frame(&self) -> &RgbImage {
-        self.last_frame.as_ref().unwrap()
+    pub fn last_frame(&self, mode: &ColorMode) -> &RgbImage {
+        &self.last_frames[mode]
     }
 }
