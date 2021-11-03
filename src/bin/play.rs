@@ -34,90 +34,53 @@ fn main() -> io::Result<()> {
 
     let mut metadata: VideoMetadata = serde_json::from_slice(&metadata_bytes).unwrap();
 
-    println!("Available video tracks:");
-
-    for (i, track) in metadata.video_tracks.iter().enumerate() {
-        println!(
-            "#{i} - {name}, {framerate:.2} fps, {color}, {width}x{height}",
-            i = i,
-            name = track.name.clone().unwrap_or_else(|| "unnamed".to_owned()),
-            framerate = track.framerate,
-            color = if track.color_mode == ColorMode::EightBit {
-                "eight bit"
-            } else {
-                "true color"
-            },
-            width = track.width,
-            height = track.height
-        );
-    }
-
-    let mut input_buffer = String::new();
-    let stdin = io::stdin();
-
-    print!("type in track number > ");
-    io::stdout().flush().unwrap();
-
-    loop {
-        stdin.read_line(&mut input_buffer)?;
-        let number_res = input_buffer.trim().parse::<usize>();
-        if number_res.is_err() {
-            println!("please specify a valid number!");
-            input_buffer = String::new();
-        } else if number_res.unwrap() > metadata.video_tracks.len() {
-            println!("please specify one of the track indexes");
-            input_buffer = String::new();
-        } else {
-            break;
-        }
-
-        print!("type in track number > ");
-        io::stdout().flush().unwrap();
-    }
-
-    let video_track_n = input_buffer.trim().parse::<usize>().unwrap();
-    input_buffer = String::new();
-
-    println!("using video track {}", video_track_n);
+    let video_track_n = dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
+        .with_prompt("video track")
+        .items(
+            &metadata
+                .video_tracks
+                .iter()
+                .map(|track| {
+                    format!(
+                        "{name}, {framerate:.2} fps, {color}, {width}x{height}",
+                        name = track.name.clone().unwrap_or_else(|| "unnamed".to_owned()),
+                        framerate = track.framerate,
+                        color = if track.color_mode == ColorMode::EightBit {
+                            "eight bit"
+                        } else {
+                            "true color"
+                        },
+                        width = track.width,
+                        height = track.height
+                    )
+                })
+                .collect::<Vec<String>>(),
+        )
+        .interact()
+        .unwrap();
 
     let mut subtitles: Vec<SubtitleEntry> = Vec::new();
 
     if !metadata.subtitle_tracks.is_empty() {
-        for (i, track) in metadata.subtitle_tracks.iter().enumerate() {
-            println!(
-                "#{i} - {name}, language: {lang}",
-                i = i,
-                name = track.name.clone().unwrap_or_else(|| "unnamed".to_owned()),
-                lang = track
-                    .lang
-                    .clone()
-                    .unwrap_or_else(|| "unspecified".to_owned()),
-            );
-        }
-
-        println!("#{} - no subtitles", metadata.subtitle_tracks.len());
-
-        print!("type in track number > ");
-        io::stdout().flush().unwrap();
-
-        loop {
-            stdin.read_line(&mut input_buffer)?;
-            let number_res = input_buffer.trim().parse::<usize>();
-            if number_res.is_err() {
-                println!("please specify a valid number!");
-                input_buffer = String::new();
-            } else if number_res.unwrap() > metadata.video_tracks.len() {
-                println!("please specify one of the track indexes");
-                input_buffer = String::new();
-            } else {
-                break;
-            }
-
-            print!("type in track number > ");
-            io::stdout().flush().unwrap();
-        }
-
-        let subtitle_track_n = input_buffer.trim().parse::<usize>().unwrap();
+        let subtitle_track_n =
+            dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
+                .with_prompt("subtitle track")
+                .items(
+                    &metadata
+                        .subtitle_tracks
+                        .iter()
+                        .map(|v| {
+                            format!(
+                                "{name}, language: {lang}",
+                                name = v.name.clone().unwrap_or_else(|| "unnamed".to_owned()),
+                                lang = v.lang.clone().unwrap_or_else(|| "unspecified".to_owned()),
+                            )
+                        })
+                        .collect::<Vec<String>>(),
+                )
+                .item("no subtitles")
+                .interact()
+                .unwrap();
 
         if subtitle_track_n < metadata.subtitle_tracks.len() {
             let track = &metadata.subtitle_tracks[subtitle_track_n];

@@ -136,10 +136,10 @@ fn main() -> std::io::Result<()> {
         .get(VideoCaptureProperties::CAP_PROP_FPS as i32)
         .ok();
 
-    let mut video_tracks: Vec<(Encoder, VideoTrack)> = matches
-        .values_of("track")
-        .unwrap()
-        .map(|cfg| {
+    let mut video_tracks: Vec<(Encoder, VideoTrack)> = if let Some(vals) =
+        matches.values_of("track")
+    {
+        vals.map(|cfg| {
             let mut map: HashMap<String, String> = cfg
                 .split_terminator(',')
                 .map(|line| {
@@ -219,44 +219,180 @@ fn main() -> std::io::Result<()> {
                 },
             )
         })
-        .collect();
+        .collect()
+    } else {
+        let mut video_tracks: Vec<(Encoder, VideoTrack)> = Vec::new();
+        let theme = dialoguer::theme::ColorfulTheme::default();
 
-    let subtitle_tracks: Vec<(File, SubtitleTrack)> = matches
-        .values_of("subtitle_track")
-        .unwrap()
-        .map(|cfg| {
-            let mut map: HashMap<String, String> = cfg
-                .split_terminator(',')
-                .map(|line| {
-                    line.split_once(':')
-                        .map(|(k, v)| (k.to_owned(), v.to_owned()))
-                        .unwrap()
-                })
-                .collect();
+        loop {
+            let add_track = dialoguer::Select::with_theme(&theme)
+                .with_prompt("add a video track?")
+                .items(&vec!["yes!", "finish video track configuration"])
+                .interact()
+                .unwrap();
+            if add_track == 1 {
+                break;
+            } else {
+                let track_name: String = dialoguer::Input::with_theme(&theme)
+                    .with_prompt("track name")
+                    .interact_text()
+                    .unwrap();
+                let width = dialoguer::Input::with_theme(&theme)
+                    .with_prompt("video width")
+                    .default(192u32)
+                    .interact_text()
+                    .unwrap();
+                let height = dialoguer::Input::with_theme(&theme)
+                    .with_prompt("video height")
+                    .default(108u32)
+                    .interact_text()
+                    .unwrap();
+                let color_mode = match dialoguer::Select::with_theme(&theme)
+                    .with_prompt("color mode")
+                    .items(&vec!["8bit", "full color"])
+                    .interact()
+                    .unwrap()
+                {
+                    0 => ColorMode::EightBit,
+                    1 => ColorMode::True,
+                    _ => panic!(),
+                };
 
-            let file_name = one_of_keys(&mut map, vec!["source", "file", "f"])
-                .expect("please specify a subtitle file!");
-            let mut sfile = File::open(&file_name).unwrap();
-            let s_len = sfile.metadata().unwrap().len();
-            let mut contents: Vec<u8> = Vec::with_capacity(s_len as usize);
-            sfile.read_to_end(&mut contents).unwrap();
-            sfile.rewind().unwrap();
+                let compression = match dialoguer::Select::with_theme(&theme)
+                    .with_prompt("compression mode")
+                    .items(&vec!["zstd", "none"])
+                    .interact()
+                    .unwrap()
+                {
+                    0 => CompressionMode::Zstd,
+                    1 => CompressionMode::None,
+                    _ => panic!(),
+                };
 
-            let format =
-                subparse::get_subtitle_format(Path::new(&file_name).extension(), &contents)
-                    .expect("couldn't guess subtitle format");
-            (
-                sfile,
-                SubtitleTrack {
-                    name: one_of_keys(&mut map, vec!["name", "n", "title"]),
-                    lang: one_of_keys(&mut map, vec!["lang"]),
-                    format: format,
-                    offset: 0,
-                    length: s_len,
-                },
-            )
-        })
-        .collect();
+                video_tracks.push((
+                    Encoder {
+                        needs_width: width,
+                        needs_height: height,
+                        needs_color: color_mode,
+                        frame_lengths: Vec::new(),
+                        output: {
+                            let file = tempfile().unwrap();
+                            if compression == CompressionMode::Zstd {
+                                OutputStream::CompressedFile({
+                                    let mut encoder = zstd::Encoder::new(file, 3).unwrap();
+                                    encoder.long_distance_matching(true).unwrap();
+                                    encoder
+                                })
+                            } else {
+                                OutputStream::File(file)
+                            }
+                        },
+                    },
+                    VideoTrack {
+                        name: Some(track_name),
+                        color_mode: color_mode,
+                        height: height,
+                        width: width,
+                        compression: compression,
+                        encode_time: SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        framerate: opencv_fps.unwrap(),
+                        offset: 0,
+                        length: 0,
+                        frame_lengths: Vec::new(),
+                    },
+                ));
+            }
+        }
+
+        video_tracks
+    };
+
+    let subtitle_tracks: Vec<(File, SubtitleTrack)> =
+        if let Some(vals) = matches.values_of("subtitle_track") {
+            vals.map(|cfg| {
+                let mut map: HashMap<String, String> = cfg
+                    .split_terminator(',')
+                    .map(|line| {
+                        line.split_once(':')
+                            .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                            .unwrap()
+                    })
+                    .collect();
+
+                let file_name = one_of_keys(&mut map, vec!["source", "file", "f"])
+                    .expect("please specify a subtitle file!");
+                let mut sfile = File::open(&file_name).unwrap();
+                let s_len = sfile.metadata().unwrap().len();
+                let mut contents: Vec<u8> = Vec::with_capacity(s_len as usize);
+                sfile.read_to_end(&mut contents).unwrap();
+                sfile.rewind().unwrap();
+
+                let format =
+                    subparse::get_subtitle_format(Path::new(&file_name).extension(), &contents)
+                        .expect("couldn't guess subtitle format");
+                (
+                    sfile,
+                    SubtitleTrack {
+                        name: one_of_keys(&mut map, vec!["name", "n", "title"]),
+                        lang: one_of_keys(&mut map, vec!["lang"]),
+                        format: format,
+                        offset: 0,
+                        length: s_len,
+                    },
+                )
+            })
+            .collect()
+        } else {
+            let mut subtitle_tracks: Vec<(File, SubtitleTrack)> = Vec::new();
+            let theme = dialoguer::theme::ColorfulTheme::default();
+
+            loop {
+                let add_track = dialoguer::Select::with_theme(&theme)
+                    .with_prompt("add a subtitle track?")
+                    .items(&vec!["yes!", "finish subtitle track configuration"])
+                    .interact()
+                    .unwrap();
+                if add_track == 1 {
+                    break;
+                } else {
+                    let track_name: String = dialoguer::Input::with_theme(&theme)
+                        .with_prompt("track name")
+                        .interact_text()
+                        .unwrap();
+                    let track_lang: String = dialoguer::Input::with_theme(&theme)
+                        .with_prompt("track language")
+                        .interact_text()
+                        .unwrap();
+                    let file_name: String = dialoguer::Input::with_theme(&theme)
+                        .with_prompt("subtitle file")
+                        .interact_text()
+                        .unwrap();
+                    let mut sfile = File::open(&file_name).unwrap();
+                    let s_len = sfile.metadata().unwrap().len();
+                    let mut contents: Vec<u8> = Vec::with_capacity(s_len as usize);
+                    sfile.read_to_end(&mut contents).unwrap();
+                    sfile.rewind().unwrap();
+
+                    let format =
+                        subparse::get_subtitle_format(Path::new(&file_name).extension(), &contents)
+                            .expect("couldn't guess subtitle format");
+                    subtitle_tracks.push((
+                        sfile,
+                        SubtitleTrack {
+                            name: Some(track_name),
+                            lang: Some(track_lang),
+                            format: format,
+                            offset: 0,
+                            length: s_len,
+                        },
+                    ));
+                }
+            }
+            subtitle_tracks
+        };
 
     let resize_filter = match matches.value_of("resize").unwrap_or("hamming") {
         "nearest" => fr::FilterType::Box,

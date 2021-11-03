@@ -47,6 +47,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "crossbeam",
+ "dialoguer",
  "fast_image_resize",
  "image 0.23.14",
  "indicatif",
@@ -214,7 +215,9 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
+ "regex 1.5.4",
  "terminal_size",
+ "unicode-width",
  "winapi",
 ]
 
@@ -303,6 +306,18 @@ checksum = "73770f8e1fe7d64df17ca66ad28994a0a623ea497fa69486e14984e715c5d174"
 dependencies = [
  "adler32",
  "byteorder",
+]
+
+[[package]]
+name = "dialoguer"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61579ada4ec0c6031cfac3f86fdba0d195a7ebeb5e36693bd53cb5999a25beeb"
+dependencies = [
+ "console",
+ "lazy_static 1.4.0",
+ "tempfile",
+ "zeroize",
 ]
 
 [[package]]
@@ -1163,6 +1178,12 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
+
+[[package]]
+name = "zeroize"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf68b08513768deaa790264a7fac27a58cbf2705cfcdc9448362229217d7e970"
 
 [[package]]
 name = "zstd"
