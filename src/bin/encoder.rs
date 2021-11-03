@@ -202,10 +202,10 @@ fn main() -> std::io::Result<()> {
                 },
                 VideoTrack {
                     name: one_of_keys(&mut map, vec!["title", "n", "name"]),
-                    color_mode: color_mode,
-                    height: height,
-                    width: width,
-                    compression: compression,
+                    color_mode,
+                    height,
+                    width,
+                    compression,
                     encode_time: SystemTime::now()
                         .duration_since(SystemTime::UNIX_EPOCH)
                         .unwrap()
@@ -227,7 +227,7 @@ fn main() -> std::io::Result<()> {
         loop {
             let add_track = dialoguer::Select::with_theme(&theme)
                 .with_prompt("add a video track?")
-                .items(&vec!["yes!", "finish video track configuration"])
+                .items(&["yes!", "finish video track configuration"])
                 .interact()
                 .unwrap();
             if add_track == 1 {
@@ -249,7 +249,7 @@ fn main() -> std::io::Result<()> {
                     .unwrap();
                 let color_mode = match dialoguer::Select::with_theme(&theme)
                     .with_prompt("color mode")
-                    .items(&vec!["8bit", "full color"])
+                    .items(&["8bit", "full color"])
                     .interact()
                     .unwrap()
                 {
@@ -260,7 +260,7 @@ fn main() -> std::io::Result<()> {
 
                 let compression = match dialoguer::Select::with_theme(&theme)
                     .with_prompt("compression mode")
-                    .items(&vec!["zstd", "none"])
+                    .items(&["zstd", "none"])
                     .interact()
                     .unwrap()
                 {
@@ -290,10 +290,10 @@ fn main() -> std::io::Result<()> {
                     },
                     VideoTrack {
                         name: Some(track_name),
-                        color_mode: color_mode,
-                        height: height,
-                        width: width,
-                        compression: compression,
+                        color_mode,
+                        height,
+                        width,
+                        compression,
                         encode_time: SystemTime::now()
                             .duration_since(SystemTime::UNIX_EPOCH)
                             .unwrap()
@@ -338,7 +338,7 @@ fn main() -> std::io::Result<()> {
                     SubtitleTrack {
                         name: one_of_keys(&mut map, vec!["name", "n", "title"]),
                         lang: one_of_keys(&mut map, vec!["lang"]),
-                        format: format,
+                        format,
                         offset: 0,
                         length: s_len,
                     },
@@ -352,7 +352,7 @@ fn main() -> std::io::Result<()> {
             loop {
                 let add_track = dialoguer::Select::with_theme(&theme)
                     .with_prompt("add a subtitle track?")
-                    .items(&vec!["yes!", "finish subtitle track configuration"])
+                    .items(&["yes!", "finish subtitle track configuration"])
                     .interact()
                     .unwrap();
                 if add_track == 1 {
@@ -384,7 +384,7 @@ fn main() -> std::io::Result<()> {
                         SubtitleTrack {
                             name: Some(track_name),
                             lang: Some(track_lang),
-                            format: format,
+                            format,
                             offset: 0,
                             length: s_len,
                         },
