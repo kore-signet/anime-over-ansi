@@ -1,6 +1,8 @@
-use crate::closest_ansi;
+use crate::color_calc::closest_ansi;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
+
+// TODO: configurable palettes
 
 pub static PALETTE: [(u8, u8, u8); 256] = [
     // idx: ansi colorid. tuple is r,g,b
@@ -272,7 +274,7 @@ lazy_static! {
     };
 }
 
-use image::{imageops::ColorMap, Rgb, RgbImage};
+use image::{imageops::ColorMap, Rgb};
 
 pub struct LABAnsiColorMap;
 
@@ -295,42 +297,4 @@ impl ColorMap for LABAnsiColorMap {
     fn map_color(&self, color: &mut Rgb<u8>) {
         *color = self.lookup(self.index_of(color)).unwrap();
     }
-}
-
-pub fn encode(img: RgbImage, mode: &str) -> String {
-    let mut frame = String::with_capacity((img.width() * img.height()) as usize);
-    for y in (0..img.height() - 1).step_by(2) {
-        for x in 0..img.width() {
-            let upper = img.get_pixel(x, y);
-            let lower = img.get_pixel(x, y + 1);
-
-            if mode == "256color" {
-                frame += &format!(
-                    "\x1B[38;5;{}m",
-                    REVERSE_PALETTE[&(upper[0], upper[1], upper[2])]
-                );
-                frame += &format!(
-                    "\x1B[48;5;{}m",
-                    REVERSE_PALETTE[&(lower[0], lower[1], lower[2])]
-                );
-            } else if mode == "truecolor" {
-                frame += &format!(
-                    "\x1B[38;2;{r};{g};{b}m",
-                    r = upper[0],
-                    g = upper[1],
-                    b = upper[2]
-                );
-                frame += &format!(
-                    "\x1B[48;2;{r};{g};{b}m",
-                    r = lower[0],
-                    g = lower[1],
-                    b = lower[2]
-                );
-            }
-
-            frame += "▀";
-        }
-        frame += "\n";
-    }
-    frame
 }

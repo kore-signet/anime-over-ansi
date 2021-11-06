@@ -9,8 +9,28 @@ edition = "2018"
 lazy_static = "1.4.0"
 image = "0.23.14"
 clap = "2.33.3"
-srtlib = "0.1"
-opencv = "0.53.0"
+opencv = "0.58.0"
+subparse = "0.7.0"
+tempfile = "3.2.0"
+zstd = "0.7"
+serde_json = "1"
+indicatif = "0.17.0-beta.1"
+fast_image_resize = "0.4.0"
+crossbeam = "0.8.1"
+dialoguer = "0.9"
+anyhow = "1.0.45"
+
+[dependencies.async-compression]
+version = "0.3.8"
+features = ["tokio","zstd"]
+
+[dependencies.tokio]
+version = "1.13"
+features = ["io-std","net","time","macros","sync","io-util","fs","rt-multi-thread"]
+
+[dependencies.serde]
+version = "1"
+features = ["derive"]
 
 [[bin]]
 name = "player"
@@ -19,3 +39,8 @@ path = "src/bin/play.rs"
 [[bin]]
 name = "encoder"
 path = "src/bin/encoder.rs"
+
+[[bin]]
+name = "server"
+path = "src/bin/server.rs"
+

@@ -1,6 +1,5 @@
-mod color_calc;
-mod palette;
-mod player;
-pub use color_calc::*;
-pub use palette::*;
-pub use player::*;
+pub mod color_calc;
+pub mod encoding;
+pub mod metadata;
+pub mod palette;
+pub mod player;
