@@ -5,31 +5,30 @@ use lazy_static::lazy_static;
 static REF_X: f64 = 95.047;
 static REF_Y: f64 = 100.000;
 static REF_Z: f64 = 108.883;
+use lab::Lab;
 
 lazy_static! {
-    static ref LAB_PALETTE: Vec<(u8, f64, f64, f64)> = {
+    static ref LAB_PALETTE: Vec<(u8, f32, f32, f32)> = {
         PALETTE
             .iter()
             .enumerate()
             .map(|(i, (r, g, b))| {
-                let (x, y, z) = rgb_to_xyz(*r as f64, *g as f64, *b as f64);
-                let (l, a, b) = xyz_to_lab(x, y, z);
-                (i as u8, l, a, b)
+                let lab = Lab::from_rgb(&[*r, *g, *b]);
+                (i as u8, lab.l, lab.a, lab.b)
             })
             .collect()
     };
 }
 
 pub fn closest_ansi(r: u8, g: u8, b: u8) -> u8 {
-    let (x, y, z) = rgb_to_xyz(r as f64, g as f64, b as f64);
-    let (l, a, b) = xyz_to_lab(x, y, z);
+    let lab = Lab::from_rgb(&[r, g, b]);
 
     *(LAB_PALETTE
         .iter()
         .map(|(idx, p_l, p_a, p_b)| {
             (
                 idx,
-                ((l - p_l).powi(2)) + ((a - p_a).powi(2)) + ((b - p_b).powi(2)),
+                ((lab.l - p_l).powi(2)) + ((lab.a - p_a).powi(2)) + ((lab.b - p_b).powi(2)),
             )
         })
         .min_by(|(_, dist_one), (_, dist_two)| dist_one.partial_cmp(dist_two).unwrap())

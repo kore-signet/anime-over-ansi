@@ -1,5 +1,5 @@
 [package]
-name = "encoder"
+name = "anime_telnet_encoder"
 version = "0.1.0"
 edition = "2018"
 
@@ -9,7 +9,6 @@ edition = "2018"
 lazy_static = "1.4.0"
 image = "0.23.14"
 clap = "2.33.3"
-opencv = "0.58.0"
 subparse = "0.7.0"
 tempfile = "3.2.0"
 zstd = "0.7"
@@ -20,6 +19,11 @@ dialoguer = "0.9"
 anyhow = "1.0.45"
 crossbeam = "0.8.1"
 
+[dependencies.opencv]
+version = "0.60.0"
+features = ["videoio","imgproc"]
+default-features = false
+
 [dependencies.anime_telnet]
 path = "../anime_lib"
 
@@ -29,5 +33,5 @@ features = ["derive"]
 
 [[bin]]
 name = "encoder"
-path = "src/encoder.rs"
+path = "src/bin/encoder.rs"
 

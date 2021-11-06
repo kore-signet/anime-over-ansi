@@ -2,3 +2,7 @@
 dev/
 owo.rs
 test.rs
+*.ansi
+*.srt
+*.ass
+*.png

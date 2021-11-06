@@ -48,11 +48,33 @@ dependencies = [
  "anyhow",
  "fast_image_resize",
  "image 0.23.14",
+ "lab",
  "lazy_static 1.4.0",
  "serde",
  "serde_json",
  "subparse",
  "tokio",
+ "zstd",
+]
+
+[[package]]
+name = "anime_telnet_encoder"
+version = "0.1.0"
+dependencies = [
+ "anime_telnet",
+ "anyhow",
+ "clap",
+ "crossbeam",
+ "dialoguer",
+ "fast_image_resize",
+ "image 0.23.14",
+ "indicatif",
+ "lazy_static 1.4.0",
+ "opencv",
+ "serde",
+ "serde_json",
+ "subparse",
+ "tempfile",
  "zstd",
 ]
 
@@ -361,27 +383,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a357d28ed41a50f9c765dbfe56cbc04a64e53e5fc58ba79fbc34c10ef3df831f"
 
 [[package]]
-name = "encoder"
-version = "0.1.0"
-dependencies = [
- "anime_telnet",
- "anyhow",
- "clap",
- "crossbeam",
- "dialoguer",
- "fast_image_resize",
- "image 0.23.14",
- "indicatif",
- "lazy_static 1.4.0",
- "opencv",
- "serde",
- "serde_json",
- "subparse",
- "tempfile",
- "zstd",
-]
-
-[[package]]
 name = "encoding_rs"
 version = "0.8.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -564,6 +565,12 @@ checksum = "229d53d58899083193af11e15917b5640cd40b29ff475a1fe4ef725deb02d0f2"
 dependencies = [
  "rayon",
 ]
+
+[[package]]
+name = "lab"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf36173d4167ed999940f804952e6b08197cae5ad5d572eb4db150ce8ad5d58f"
 
 [[package]]
 name = "lazy_static"
@@ -771,9 +778,9 @@ checksum = "692fcb63b64b1758029e0a96ee63e049ce8c5948587f2f7208df04625e5f6b56"
 
 [[package]]
 name = "opencv"
-version = "0.58.0"
+version = "0.60.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e11f886b17e2339ccdd8232216d5a9ab1dbae15ad93238987142826b4719240a"
+checksum = "c5e75fff905873c828a7e4ff0175408e2832cf41d3d90be4cdcff139ea85e3c2"
 dependencies = [
  "cc",
  "clang",
@@ -792,9 +799,9 @@ dependencies = [
 
 [[package]]
 name = "opencv-binding-generator"
-version = "0.33.0"
+version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea6d6fb7ac8593eb1774fd4142bf5cdab6b9a555662a0e904baf8b84802c1399"
+checksum = "879f8e4d1e8a1b6721e7310262b1aa8ca3af993f42b02ecdcd3aa3c5a960a495"
 dependencies = [
  "clang",
  "clang-sys",

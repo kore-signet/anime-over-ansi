@@ -1,13 +1,8 @@
 use anime_telnet::{encoding::*, metadata::*};
 use clap::Arg;
-use opencv::core::{Mat, MatTraitConst, Vector};
-use opencv::videoio::{
-    VideoCapture, VideoCaptureProperties, VideoCaptureTrait, VideoCaptureTraitConst,
-};
 
-use crossbeam::channel::unbounded;
-use image::{RgbImage, RgbaImage};
-use indicatif::{ProgressBar, ProgressStyle};
+use opencv::videoio::{VideoCapture, VideoCaptureProperties, VideoCaptureTraitConst};
+
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, prelude::*, BufWriter};
@@ -429,74 +424,15 @@ fn main() -> std::io::Result<()> {
             .insert(e.needs_color);
     }
 
-    let mut mat = Mat::default();
-    let mut rgb_mat = Mat::default();
-
-    let encoder_bar = ProgressBar::new(frame_quant as u64);
-    encoder_bar.set_style(
-        ProgressStyle::default_bar()
-            .template("{per_sec:5!}fps, ETA {eta} - {percent}% done, encoding frame {pos} out of {len}\n{bar:40.green/white}"),
-    );
-
-    let mut buffer = Vector::<u8>::with_capacity((video_width * video_height * 3) as usize);
-
-    let (snd, rcv) = unbounded();
-    crossbeam::scope(|s| {
-        s.spawn(|_| {
-            while video_cap.read(&mut mat).unwrap() {
-                opencv::imgproc::cvt_color(
-                    &mat,
-                    &mut rgb_mat,
-                    opencv::imgproc::ColorConversionCodes::COLOR_BGR2RGBA as i32,
-                    0,
-                )
-                .unwrap();
-
-                rgb_mat.reshape(1, 1).unwrap().copy_to(&mut buffer).unwrap();
-
-                let img: RgbaImage =
-                    RgbaImage::from_raw(video_width as u32, video_height as u32, buffer.to_vec())
-                        .unwrap();
-
-                snd.send(
-                    processor_pipeline
-                        .iter()
-                        .flat_map(|(_, p)| {
-                            p.process(&img)
-                                .into_iter()
-                                .map(move |r| (p.width, p.height, r.0, r.1))
-                        })
-                        .collect::<Vec<(u32, u32, ColorMode, RgbImage)>>(),
-                )
-                .unwrap();
-            }
-
-            drop(snd);
-        });
-
-        for msg in rcv.iter() {
-            for (encoder, _) in video_tracks.iter_mut() {
-                encoder
-                    .encode_frame(
-                        &msg[msg
-                            .iter()
-                            .position(|v| {
-                                v.0 == encoder.needs_width
-                                    && v.1 == encoder.needs_height
-                                    && v.2 == encoder.needs_color
-                            })
-                            .unwrap()]
-                        .3,
-                    )
-                    .unwrap();
-            }
-
-            encoder_bar.inc(1);
-        }
-
-        encoder_bar.finish();
-    })
-    .unwrap();
+    anime_telnet_encoder::encode(
+        &mut video_cap,
+        &processor_pipeline.into_iter().map(|(_, p)| p).collect(),
+        &mut video_tracks,
+        frame_quant as u64,
+        video_width as u32,
+        video_height as u32,
+        true,
+    )?;
 
     println!("writing finished file..");
 
