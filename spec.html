@@ -1,0 +1,98 @@
+<html>
+  <head>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fira+Sans+Condensed:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700;1,800;1,900&family=Montserrat:wght@500&family=Noto+Serif&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      html {
+        background-color: black;
+        color: white;
+      }
+
+      .main-title {
+        font-family: "Fira Sans Condensed", sans-serif;
+        font-size: 4rem;
+        margin-bottom: 0;
+      }
+
+      .subtitle {
+        font-family: "Fira Sans Condensed", sans-serif;
+        font-style: italic;
+        font-weight: 100;
+        margin-top: 0;
+      }
+
+      .heading {
+        font-family: "Montserrat", sans-serif;
+        margin-bottom: 0;
+      }
+
+      .main-title > span {
+        color: #ec8e8e;
+      }
+
+      .flex-col {
+        display: flex;
+        flex-direction: column;
+        flex-basis: 100%;
+        justify-content: center;
+        align-items: center;
+      }
+
+      p {
+        font-family: "Noto Serif", "serif";
+        font-size: 1rem;
+      }
+
+     ul {
+         list-style-type: '>   '
+     }
+
+      li {
+        font-family: "Noto Serif", "serif";
+      }
+    </style>
+  </head>
+  <body>
+    <h1 class="main-title">ansi<span>.</span>moe specification</h1>
+    <h2 class="heading">1. metadata </h2>
+    <p>
+        every file starts with an unsigned 8 bit integer in big-endian format, describing the length of the JSON metadata for the file. 
+        the metadata which follows is composed of a JSON object, containing two top level keys: 'video_tracks' and 'subtitle_tracks'
+    </p>
+    <h3 class="heading">1.1 video tracks</h3>
+    <p>
+        video tracks are described by json objects with the following keys.
+        <ul>
+            <li>'name' (optional) - name for the track</li>
+            <li>'framerate' - framerate video should be played at</li>
+            <li>'color_mode' - color mode used for encoding the track, either 'True' or 'EightBit'</li>
+            <li>'compression' - compression used on this track. may be 'None' or 'Zstd'</li>
+            <li>'width' - width of the video track</li>
+            <li>'height' - height of the video track</li>
+            <li>'encode_time' - time track was encoded, in seconds since the unix epoch </li>
+            <li>'frame_lengths' - length of every frame, in order, in bytes. used for reading each frame</li>
+            <li>'offset' - offset track data starts at (does not account for the size of the metadata)</li>
+            <li>'length' - length in bytes of the track data</li>
+        </ul>
+    </p>
+    <h4 class="heading">1.1.1 video frames</h4>
+    <p>
+        video frames are encoded utf8 strings containing a series of half-block unicode characters, where the upper half is colored using a foreground-setting ANSI escape code and the lower half is colored using a background-setting one, displaying two 'pixels' with one character.
+    </p>
+    <h3 class="heading">1.2 subtitle tracks</h3>
+    <p>
+        subtitle tracks are described by json objects with the following keys.
+        <ul>
+            <li>'name' (optional) - name for the track</li>
+            <li>'lang' (optional) - language of the track</li>
+            <li>'format' - format of the subtitle track. may be 'SubRip', 'SubStationAlpha', or 'MicroDVD'.</li>
+            <li>'offset' - offset track data starts at (does not account for the size of the metadata)</li>
+            <li>'length' - length in bytes of the track data</li>
+        </ul>
+    </p>
+  </body>
+</html>

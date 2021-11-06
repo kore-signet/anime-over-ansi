@@ -1,0 +1,121 @@
+<html>
+  <head>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fira+Sans+Condensed:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700;1,800;1,900&family=Montserrat:wght@500&family=Noto+Serif&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      html {
+        background-color: black;
+        color: white;
+      }
+
+      .main-title {
+        font-family: "Fira Sans Condensed", sans-serif;
+        font-size: 4rem;
+        margin-bottom: 0;
+      }
+
+      .subtitle {
+        font-family: "Fira Sans Condensed", sans-serif;
+        font-style: italic;
+        font-weight: 100;
+        margin-top: 0;
+      }
+
+      .heading {
+        font-family: "Montserrat", sans-serif;
+        margin-bottom: 0;
+      }
+
+      .main-title > span {
+        color: #ec8e8e;
+      }
+
+      .flex-col {
+        display: flex;
+        flex-direction: column;
+        flex-basis: 100%;
+        justify-content: center;
+        align-items: center;
+      }
+
+      p {
+        max-width: 50%;
+        text-align: center;
+        font-family: "Noto Serif", "serif";
+        font-size: 1.3rem;
+        margin-top: 0.5%;
+      }
+
+      a {
+        max-width: 50%;
+        text-align: center;
+        font-family: "Noto Serif", "serif";
+        font-size: 1.3rem;
+        margin-top: 0.5%;
+        color: #c9ffca;
+      }
+
+      @media only screen and (min-device-width: 320px) and (max-device-width: 480px) and (-webkit-min-device-pixel-ratio: 2) and (orientation: portrait) {
+      }
+
+      @media (min-width: 320px) and (orientation: portrait) {
+        html {
+          font-size: 26px;
+        }
+        video {
+          width: 100%;
+        }
+      }
+
+      @media (min-width: 480px) and (orientation: portrait) {
+        html {
+          font-size: 26px;
+        }
+
+        video {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="flex-col">
+      <h1 class="main-title">ansi<span>.</span>moe</h1>
+      <h2 class="subtitle">a video format, for your terminal</h2>
+      <br />
+      <h2 class="heading">why?</h2>
+      <p>i was bored</p>
+      <h2 class="heading">how?</h2>
+      <p>
+        using the unicode half block character and ANSI terminal escape codes to
+        fake pixels
+      </p>
+      <h2 class="heading">can i see?</h2>
+      <p>yeah</p>
+      <p>
+        <video controls width="50%;" autoplay loop>
+          <source src="./showcase.mp4" type="video/mp4" />
+        </video>
+      </p>
+      <h2 class="heading">i hate this. how do i use it</h2>
+      <p>
+        you can find the code to build on the
+        <a href="https://github.com/alisww/anime-over-ansi">github.</a>
+        pre-built releases coming soon
+      </p>
+      <h2 class="heading">is there a spec</h2>
+      <a href="spec.html"> unfortunately </a>
+      <h2 class="heading">who should i hold responsible for this</h2>
+      <p>
+        allie signet, they/them<br /><a
+          href="https://twitter.com/sapphiclinguine"
+          >on twitter</a
+        ><br /><a href="https://cat-girl.gay">or at cat-girl.gay</a>
+      </p>
+    </div>
+  </body>
+</html>
