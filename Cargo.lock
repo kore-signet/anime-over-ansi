@@ -46,19 +46,12 @@ name = "anime_telnet"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-compression",
- "clap",
- "crossbeam",
- "dialoguer",
  "fast_image_resize",
  "image 0.23.14",
- "indicatif",
  "lazy_static 1.4.0",
- "opencv",
  "serde",
  "serde_json",
  "subparse",
- "tempfile",
  "tokio",
  "zstd",
 ]
@@ -366,6 +359,27 @@ name = "encode_unicode"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a357d28ed41a50f9c765dbfe56cbc04a64e53e5fc58ba79fbc34c10ef3df831f"
+
+[[package]]
+name = "encoder"
+version = "0.1.0"
+dependencies = [
+ "anime_telnet",
+ "anyhow",
+ "clap",
+ "crossbeam",
+ "dialoguer",
+ "fast_image_resize",
+ "image 0.23.14",
+ "indicatif",
+ "lazy_static 1.4.0",
+ "opencv",
+ "serde",
+ "serde_json",
+ "subparse",
+ "tempfile",
+ "zstd",
+]
 
 [[package]]
 name = "encoding_rs"
@@ -808,6 +822,26 @@ name = "pkg-config"
 version = "0.3.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12295df4f294471248581bc09bef3c38a5e46f1e36d6a37353621a0c6c357e1f"
+
+[[package]]
+name = "player"
+version = "0.1.0"
+dependencies = [
+ "anime_telnet",
+ "anyhow",
+ "async-compression",
+ "clap",
+ "dialoguer",
+ "fast_image_resize",
+ "image 0.23.14",
+ "lazy_static 1.4.0",
+ "serde",
+ "serde_json",
+ "subparse",
+ "tempfile",
+ "tokio",
+ "zstd",
+]
 
 [[package]]
 name = "png"

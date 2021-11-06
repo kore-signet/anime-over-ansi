@@ -1,0 +1,33 @@
+[package]
+name = "encoder"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lazy_static = "1.4.0"
+image = "0.23.14"
+clap = "2.33.3"
+opencv = "0.58.0"
+subparse = "0.7.0"
+tempfile = "3.2.0"
+zstd = "0.7"
+serde_json = "1"
+indicatif = "0.17.0-beta.1"
+fast_image_resize = "0.4.0"
+dialoguer = "0.9"
+anyhow = "1.0.45"
+crossbeam = "0.8.1"
+
+[dependencies.anime_telnet]
+path = "../anime_lib"
+
+[dependencies.serde]
+version = "1"
+features = ["derive"]
+
+[[bin]]
+name = "encoder"
+path = "src/encoder.rs"
+
