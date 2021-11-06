@@ -30,7 +30,7 @@ fn one_of_keys(map: &mut HashMap<String, String>, keys: Vec<&'static str>) -> Op
 }
 
 fn main() -> std::io::Result<()> {
-    let matches = clap::App::new("anime over telnet encoder")
+    let matches = clap::App::new("ansi.moe encoder")
         .version("1.0")
         .author("allie signet <allie@cat-girl.gay>")
         .about("encodes video into ANSI escape sequences")
@@ -189,10 +189,9 @@ fn main() -> std::io::Result<()> {
                         let file = tempfile().unwrap();
                         if compression == CompressionMode::Zstd {
                             OutputStream::CompressedFile({
-                                let mut encoder =
+                                let encoder =
                                     zstd::Encoder::new(file, compression_level.unwrap_or(3))
                                         .unwrap();
-                                encoder.long_distance_matching(true).unwrap();
                                 encoder
                             })
                         } else {
@@ -279,8 +278,7 @@ fn main() -> std::io::Result<()> {
                             let file = tempfile().unwrap();
                             if compression == CompressionMode::Zstd {
                                 OutputStream::CompressedFile({
-                                    let mut encoder = zstd::Encoder::new(file, 3).unwrap();
-                                    encoder.long_distance_matching(true).unwrap();
+                                    let encoder = zstd::Encoder::new(file, 3).unwrap();
                                     encoder
                                 })
                             } else {

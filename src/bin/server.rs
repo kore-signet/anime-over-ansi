@@ -4,10 +4,23 @@ use std::io::SeekFrom;
 
 use subparse::SubtitleEntry;
 use tokio::fs::File;
-use tokio::io::{self, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
 use clap::Arg;
+
+macro_rules! break_error {
+    ($ex:expr, $msg:expr) => {
+        match $ex {
+            Ok(_) => (),
+            Err(_) => {
+                eprintln!("{}", $msg);
+                break;
+            }
+        }
+    };
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -21,9 +34,16 @@ async fn main() -> anyhow::Result<()> {
                 .required(true)
                 .index(1),
         )
+        .arg(
+            Arg::with_name("BIND")
+                .help("address to listen on")
+                .required(true)
+                .index(2),
+        )
         .get_matches();
 
     let input_path = matches.value_of("INPUT").unwrap();
+    let addr = matches.value_of("BIND").unwrap().to_owned();
 
     let input_f = File::open(input_path).await?;
     let mut reader = BufReader::new(input_f);
@@ -114,12 +134,24 @@ async fn main() -> anyhow::Result<()> {
         .seek(SeekFrom::Start(file_start_offset + video_track.offset))
         .await?;
 
-    let (tx, mut rx) = broadcast::channel::<Vec<u8>>(video_track.framerate as usize * 60);
-    // println!("{:?}",subtitles);
+    let (tx, _rx) = broadcast::channel::<Vec<u8>>(video_track.framerate as usize * 60);
+    // println!("{:?}",subtitles);]
+    let tcp_tx = tx.clone();
+
     tokio::spawn(async move {
-        let mut stdout = io::stdout();
-        while let Ok(val) = rx.recv().await {
-            stdout.write_all(&val).await.unwrap();
+        let listener = TcpListener::bind(addr).await.unwrap();
+        loop {
+            let (mut stream, addr) = listener.accept().await.unwrap();
+            eprintln!("got new client {}", addr);
+            let mut msgs = tcp_tx.subscribe();
+            tokio::spawn(async move {
+                while let Ok(val) = msgs.recv().await {
+                    break_error!(
+                        stream.write_all(&val).await,
+                        format!("couldn't write to client {}, closing connection.", addr)
+                    );
+                }
+            });
         }
     });
 
