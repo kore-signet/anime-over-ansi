@@ -36,6 +36,7 @@ pub struct VideoTrack {
     pub offset: u64, // position in file at which it starts
     pub length: u64, // position in file at which it ends,
     pub frame_lengths: Vec<u64>, // length of every frame
+    pub frame_hashes: Vec<u32>, // adler32 hash of every frame
 }
 
 #[derive(Serialize, Deserialize, Debug)]

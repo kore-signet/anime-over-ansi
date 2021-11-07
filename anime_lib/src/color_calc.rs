@@ -1,4 +1,5 @@
 use crate::palette::*;
+use argmm::ArgMinMax;
 use lazy_static::lazy_static;
 
 // D65 standard illuminant refs
@@ -23,17 +24,14 @@ lazy_static! {
 pub fn closest_ansi(r: u8, g: u8, b: u8) -> u8 {
     let lab = Lab::from_rgb(&[r, g, b]);
 
-    *(LAB_PALETTE
+    LAB_PALETTE
         .iter()
-        .map(|(idx, p_l, p_a, p_b)| {
-            (
-                idx,
-                ((lab.l - p_l).powi(2)) + ((lab.a - p_a).powi(2)) + ((lab.b - p_b).powi(2)),
-            )
+        .map(|(_idx, p_l, p_a, p_b)| {
+            (lab.l - p_l).powi(2) + (lab.a - p_a).powi(2) + (lab.b - p_b).powi(2)
         })
-        .min_by(|(_, dist_one), (_, dist_two)| dist_one.partial_cmp(dist_two).unwrap())
-        .unwrap()
-        .0)
+        .collect::<Vec<f32>>()
+        .argmin()
+        .unwrap() as u8
 }
 
 pub fn rgb_to_xyz(r: f64, g: f64, b: f64) -> (f64, f64, f64) {

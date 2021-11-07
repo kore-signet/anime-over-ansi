@@ -1,13 +1,15 @@
 use anime_telnet::{encoding::*, metadata::*};
 use clap::Arg;
 
-use opencv::videoio::{VideoCapture, VideoCaptureProperties, VideoCaptureTraitConst};
-
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, prelude::*, BufWriter};
 use std::path::Path;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+
+use ac_ffmpeg::codec::video::VideoDecoder;
+use ac_ffmpeg::format::demuxer::Demuxer;
+use ac_ffmpeg::format::io::IO as FfmpegIO;
 
 use fast_image_resize as fr;
 
@@ -122,14 +124,33 @@ fn main() -> std::io::Result<()> {
         )
         .get_matches();
 
-    let input_file = matches.value_of("INPUT").unwrap();
+    ac_ffmpeg::set_log_callback(|_, m| {
+        println!("ffmpeg: {}", m);
+    });
+
+    let input_file = File::open(matches.value_of("INPUT").unwrap()).unwrap();
+    let ffmpeg_io = FfmpegIO::from_seekable_read_stream(input_file);
+    let mut demuxer = Demuxer::builder()
+        .build(ffmpeg_io)
+        .unwrap()
+        .find_stream_info(Some(Duration::from_secs(40)))
+        .ok()
+        .unwrap();
+
+    let (stream_index, (stream, _)) = demuxer
+        .streams()
+        .iter()
+        .map(|stream| (stream, stream.codec_parameters()))
+        .enumerate()
+        .find(|(_, (_, params))| params.is_video_codec())
+        .unwrap();
+
+    let ffmpeg_fps = stream.real_frame_rate().unwrap();
+
+    let mut video_decoder = VideoDecoder::from_stream(stream).unwrap().build().unwrap();
+
     let out_fs = File::create(matches.value_of("OUT").unwrap()).unwrap();
     let mut out_writer = BufWriter::new(out_fs);
-
-    let mut video_cap = VideoCapture::from_file(input_file, 0).expect("couldn't open video file");
-    let opencv_fps = video_cap
-        .get(VideoCaptureProperties::CAP_PROP_FPS as i32)
-        .ok();
 
     let mut video_tracks: Vec<(Encoder, VideoTrack)> = if let Some(vals) =
         matches.values_of("track")
@@ -180,6 +201,7 @@ fn main() -> std::io::Result<()> {
                     needs_height: height,
                     needs_color: color_mode,
                     frame_lengths: Vec::new(),
+                    frame_hashes: Vec::new(),
                     output: {
                         let file = tempfile().unwrap();
                         if compression == CompressionMode::Zstd {
@@ -206,10 +228,11 @@ fn main() -> std::io::Result<()> {
                         .as_secs(),
                     framerate: one_of_keys(&mut map, vec!["fps", "rate", "framerate", "r"])
                         .map(|v| v.parse::<f64>().unwrap())
-                        .unwrap_or_else(|| opencv_fps.unwrap()),
+                        .unwrap_or(ffmpeg_fps),
                     offset: 0,
                     length: 0,
                     frame_lengths: Vec::new(),
+                    frame_hashes: Vec::new(),
                 },
             )
         })
@@ -269,6 +292,7 @@ fn main() -> std::io::Result<()> {
                         needs_height: height,
                         needs_color: color_mode,
                         frame_lengths: Vec::new(),
+                        frame_hashes: Vec::new(),
                         output: {
                             let file = tempfile().unwrap();
                             if compression == CompressionMode::Zstd {
@@ -291,10 +315,11 @@ fn main() -> std::io::Result<()> {
                             .duration_since(SystemTime::UNIX_EPOCH)
                             .unwrap()
                             .as_secs(),
-                        framerate: opencv_fps.unwrap(),
+                        framerate: ffmpeg_fps,
                         offset: 0,
                         length: 0,
                         frame_lengths: Vec::new(),
+                        frame_hashes: Vec::new(),
                     },
                 ));
             }
@@ -397,18 +422,6 @@ fn main() -> std::io::Result<()> {
         _ => fr::FilterType::Hamming,
     };
 
-    let frame_quant = video_cap
-        .get(VideoCaptureProperties::CAP_PROP_FRAME_COUNT as i32)
-        .unwrap();
-
-    let video_width = video_cap
-        .get(VideoCaptureProperties::CAP_PROP_FRAME_WIDTH as i32)
-        .unwrap() as i32;
-
-    let video_height = video_cap
-        .get(VideoCaptureProperties::CAP_PROP_FRAME_HEIGHT as i32)
-        .unwrap() as i32;
-
     let mut processor_pipeline: HashMap<(u32, u32), ProcessorPipeline> = HashMap::new();
 
     for (e, _) in video_tracks.iter() {
@@ -425,16 +438,13 @@ fn main() -> std::io::Result<()> {
     }
 
     anime_telnet_encoder::encode(
-        &mut video_cap,
+        &mut video_decoder,
+        &mut demuxer,
+        stream_index,
         &processor_pipeline.into_iter().map(|(_, p)| p).collect(),
         &mut video_tracks,
-        frame_quant as u64,
-        video_width as u32,
-        video_height as u32,
         true,
     )?;
-
-    println!("writing finished file..");
 
     let mut track_position = 0;
     let mut track_files: Vec<File> = Vec::new();
@@ -442,9 +452,10 @@ fn main() -> std::io::Result<()> {
     let mut done_subtitles: Vec<SubtitleTrack> = Vec::new();
 
     for (encoder, mut track) in video_tracks {
-        let (frame_lengths, mut file) = encoder.finish().unwrap();
+        let (frame_lengths, frame_hashes, mut file) = encoder.finish().unwrap();
         file.flush().unwrap();
 
+        track.frame_hashes = frame_hashes;
         track.frame_lengths = frame_lengths;
         track.offset = track_position;
         track.length = file.metadata().unwrap().len();

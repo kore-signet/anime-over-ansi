@@ -8,6 +8,7 @@ use image::{
     imageops::{self},
     Rgb, RgbImage, RgbaImage,
 };
+use simd_adler32::adler32;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Write};
@@ -42,6 +43,7 @@ pub struct Encoder<'a> {
     pub needs_height: u32,
     pub needs_color: ColorMode,
     pub frame_lengths: Vec<u64>,
+    pub frame_hashes: Vec<u32>,
     pub output: OutputStream<'a>,
 }
 
@@ -103,11 +105,12 @@ impl Encoder<'_> {
 
         let bytes = frame.as_bytes();
         self.frame_lengths.push(bytes.len() as u64);
+        self.frame_hashes.push(adler32(&bytes));
         self.output.write_all(bytes)
     }
 
-    pub fn finish(self) -> io::Result<(Vec<u64>, fs::File)> {
-        Ok((self.frame_lengths, self.output.finish()?))
+    pub fn finish(self) -> io::Result<(Vec<u64>, Vec<u32>, fs::File)> {
+        Ok((self.frame_lengths, self.frame_hashes, self.output.finish()?))
     }
 }
 

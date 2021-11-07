@@ -1,54 +1,84 @@
 use anime_telnet::{encoding::*, metadata::*};
 
-use opencv::core::{Mat, MatTraitConst, Vector};
-use opencv::videoio::{VideoCapture, VideoCaptureTrait};
-
 use crossbeam::channel::bounded;
 use image::{RgbImage, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
 
+use ac_ffmpeg::codec::video::{PixelFormat, VideoDecoder, VideoFrameScaler};
+use ac_ffmpeg::codec::Decoder;
+use ac_ffmpeg::format::demuxer::Demuxer;
+
+use std::str::FromStr;
+
 pub fn encode(
-    video_cap: &mut VideoCapture,
+    video_decoder: &mut VideoDecoder,
+    demuxer: &mut Demuxer<std::fs::File>,
+    stream_index: usize,
     pipelines: &Vec<ProcessorPipeline>,
     tracks: &mut Vec<(Encoder, VideoTrack)>,
-    frame_quant: u64,
-    width: u32,
-    height: u32,
     show_progress: bool,
 ) -> std::io::Result<()> {
-    let mut mat = Mat::default();
-    let mut rgb_mat = Mat::default();
-
-    let encoder_bar = ProgressBar::new(frame_quant as u64);
+    let encoder_bar = ProgressBar::new_spinner();
     if !show_progress {
         encoder_bar.set_draw_target(indicatif::ProgressDrawTarget::hidden());
     } else {
         encoder_bar.set_style(
-            ProgressStyle::default_bar()
-                .template("{per_sec:5!}fps, ETA {eta} - {percent}% done, encoding frame {pos} out of {len}\n{bar:40.green/white}"),
+            ProgressStyle::default_spinner()
+                .template("{spinner} {per_sec:5!}fps - encoding frame {pos}"),
         );
+        encoder_bar.enable_steady_tick(200);
     }
-
-    let mut buffer = Vector::<u8>::with_capacity((width * height * 3) as usize);
 
     let (snd_img, rcv_img) = bounded(64);
     let (snd_resized, rcv_resized) = bounded(64);
 
     crossbeam::scope(|s| {
         s.spawn(|_| {
-            while video_cap.read(&mut mat).unwrap() {
-                opencv::imgproc::cvt_color(
-                    &mat,
-                    &mut rgb_mat,
-                    opencv::imgproc::ColorConversionCodes::COLOR_BGR2RGBA as i32,
-                    0,
-                )
+            let codec_parameters = video_decoder.codec_parameters();
+            let mut color_transformer = VideoFrameScaler::builder()
+                .source_pixel_format(codec_parameters.pixel_format())
+                .source_height(codec_parameters.height())
+                .source_width(codec_parameters.width())
+                .target_height(codec_parameters.height())
+                .target_width(codec_parameters.width())
+                .target_pixel_format(PixelFormat::from_str("rgba").unwrap())
+                .build()
                 .unwrap();
 
-                rgb_mat.reshape(1, 1).unwrap().copy_to(&mut buffer).unwrap();
+            while let Some(packet) = demuxer.take().unwrap() {
+                if packet.stream_index() != stream_index {
+                    continue;
+                }
+
+                video_decoder.push(packet).unwrap();
+
+                while let Some(frame) = video_decoder.take().unwrap() {
+                    let frame = color_transformer.scale(&frame).unwrap();
+                    snd_img
+                        .send(
+                            RgbaImage::from_raw(
+                                codec_parameters.width() as u32,
+                                codec_parameters.height() as u32,
+                                frame.planes()[0].data().to_vec(),
+                            )
+                            .unwrap(),
+                        )
+                        .unwrap();
+                }
+            }
+
+            video_decoder.flush().unwrap();
+
+            while let Some(frame) = video_decoder.take().unwrap() {
+                let frame = color_transformer.scale(&frame).unwrap();
                 snd_img
                     .send(
-                        RgbaImage::from_raw(width as u32, height as u32, buffer.to_vec()).unwrap(),
+                        RgbaImage::from_raw(
+                            codec_parameters.width() as u32,
+                            codec_parameters.height() as u32,
+                            frame.planes()[0].data().to_vec(),
+                        )
+                        .unwrap(),
                     )
                     .unwrap();
             }
@@ -75,6 +105,8 @@ pub fn encode(
             drop(snd_resized);
         });
 
+        let mut idx = 0;
+
         for msg in rcv_resized.iter() {
             for (encoder, _) in tracks.iter_mut() {
                 encoder
@@ -92,7 +124,8 @@ pub fn encode(
                     .unwrap();
             }
 
-            encoder_bar.inc(1);
+            idx += 1;
+            encoder_bar.set_position(idx);
         }
 
         encoder_bar.finish();

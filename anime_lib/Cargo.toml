@@ -7,13 +7,17 @@ edition = "2018"
 
 [dependencies]
 lazy_static = "1.4.0"
-image = "0.23.14"
 subparse = "0.7.0"
 zstd = "0.7"
-serde_json = "1"
 fast_image_resize = "0.4.0"
 anyhow = "1.0.45"
+simd-adler32 = "0.3.4"
 lab = "0.11.0"
+argmm = "0.1.2"
+
+[dependencies.image]
+version = "0.23.14"
+default-features = false
 
 [dependencies.tokio]
 version = "1.13"
