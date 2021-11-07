@@ -6,6 +6,15 @@ pub enum ColorMode {
     EightBit,
 }
 
+impl ColorMode {
+    pub fn byte_size(&self) -> usize {
+        match self {
+            ColorMode::True => 3,
+            ColorMode::EightBit => 1,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum CompressionMode {
     None,

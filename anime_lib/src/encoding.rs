@@ -48,6 +48,7 @@ pub struct Encoder<'a> {
 }
 
 impl Encoder<'_> {
+    // todo: stop using rgbimage here and use a raw vec<u8> which can be 8bit or 24bit
     pub fn encode_frame(&mut self, img: &RgbImage) -> io::Result<()> {
         let mut last_upper: Option<Rgb<u8>> = None;
         let mut last_lower: Option<Rgb<u8>> = None;
