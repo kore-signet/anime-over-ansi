@@ -13,7 +13,9 @@ fast_image_resize = "0.4.0"
 anyhow = "1.0.45"
 simd-adler32 = "0.3.4"
 lab = "0.11.0"
-argmm = "0.1.2"
+
+[dependencies.argmm]
+git = "https://github.com/alisww/argmm"
 
 [dependencies.image]
 version = "0.23.14"
