@@ -9,13 +9,12 @@ static REF_Z: f64 = 108.883;
 use lab::Lab;
 
 lazy_static! {
-    static ref LAB_PALETTE: Vec<(u8, f32, f32, f32)> = {
+    static ref LAB_PALETTE: Vec<(f32, f32, f32)> = {
         PALETTE
             .iter()
-            .enumerate()
-            .map(|(i, (r, g, b))| {
+            .map(|(r, g, b)| {
                 let lab = Lab::from_rgb(&[*r, *g, *b]);
-                (i as u8, lab.l, lab.a, lab.b)
+                (lab.l, lab.a, lab.b)
             })
             .collect()
     };
@@ -26,7 +25,7 @@ pub fn closest_ansi(r: u8, g: u8, b: u8) -> u8 {
 
     LAB_PALETTE
         .iter()
-        .map(|(_idx, p_l, p_a, p_b)| {
+        .map(|(p_l, p_a, p_b)| {
             (lab.l - p_l).powi(2) + (lab.a - p_a).powi(2) + (lab.b - p_b).powi(2)
         })
         .collect::<Vec<f32>>()

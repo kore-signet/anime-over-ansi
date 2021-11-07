@@ -5,7 +5,6 @@ version = 3
 [[package]]
 name = "ac-ffmpeg"
 version = "0.17.1"
-source = "git+https://github.com/alisww/rust-ac-ffmpeg.git#fc80d358c4483c3d2dbcb634781693dd028b44aa"
 dependencies = [
  "cc",
  "lazy_static 1.4.0",

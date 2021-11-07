@@ -137,7 +137,7 @@ impl ProcessorPipeline {
             src_image.pixel_type(),
         );
         let mut dst_view = dst_image.view_mut();
-        let mut resizer = fr::Resizer::new(fr::ResizeAlg::Convolution(fr::FilterType::Lanczos3));
+        let mut resizer = fr::Resizer::new(fr::ResizeAlg::Convolution(self.filter));
         resizer.resize(&src_image.view(), &mut dst_view).unwrap();
 
         let frame: RgbImage =
