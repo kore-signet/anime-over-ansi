@@ -128,7 +128,8 @@ pub fn encode(
             encoder_bar.set_position(idx);
         }
 
-        encoder_bar.finish();
+        encoder_bar.finish_at_current_pos();
+        println!("finished encoding; writing final file..");
     })
     .unwrap();
 
