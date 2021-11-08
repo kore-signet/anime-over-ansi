@@ -48,6 +48,41 @@ pub struct Encoder<'a> {
 }
 
 impl Encoder<'_> {
+    fn color(&self, pixel: &Rgb<u8>, fg: bool) -> String {
+        match self.needs_color {
+            ColorMode::EightBit => {
+                if fg {
+                    format!(
+                        "\x1B[38;5;{}m",
+                        REVERSE_PALETTE[&(pixel[0], pixel[1], pixel[2])]
+                    )
+                } else {
+                    format!(
+                        "\x1B[48;5;{}m",
+                        REVERSE_PALETTE[&(pixel[0], pixel[1], pixel[2])]
+                    )
+                }
+            }
+            _ => {
+                if fg {
+                    format!(
+                        "\x1B[38;2;{r};{g};{b}m",
+                        r = pixel[0],
+                        g = pixel[1],
+                        b = pixel[2]
+                    )
+                } else {
+                    format!(
+                        "\x1B[48;2;{r};{g};{b}m",
+                        r = pixel[0],
+                        g = pixel[1],
+                        b = pixel[2]
+                    )
+                }
+            }
+        }
+    }
+
     // todo: stop using rgbimage here and use a raw vec<u8> which can be 8bit or 24bit
     pub fn encode_frame(&mut self, img: &RgbImage) -> io::Result<()> {
         let mut last_upper: Option<Rgb<u8>> = None;
@@ -59,47 +94,18 @@ impl Encoder<'_> {
                 let upper = img.get_pixel(x, y);
                 let lower = img.get_pixel(x, y + 1);
 
-                match self.needs_color {
-                    ColorMode::EightBit => {
-                        if last_upper.is_none() || &last_upper.unwrap() != upper {
-                            frame += &format!(
-                                "\x1B[38;5;{}m",
-                                REVERSE_PALETTE[&(upper[0], upper[1], upper[2])]
-                            );
-                        }
-
-                        if last_lower.is_none() || &last_lower.unwrap() != lower {
-                            frame += &format!(
-                                "\x1B[48;5;{}m",
-                                REVERSE_PALETTE[&(lower[0], lower[1], lower[2])]
-                            );
-                        }
-                    }
-                    ColorMode::True => {
-                        if last_upper.is_none() || &last_upper.unwrap() != upper {
-                            frame += &format!(
-                                "\x1B[38;2;{r};{g};{b}m",
-                                r = upper[0],
-                                g = upper[1],
-                                b = upper[2]
-                            );
-                        }
-
-                        if last_lower.is_none() || &last_lower.unwrap() != lower {
-                            frame += &format!(
-                                "\x1B[48;2;{r};{g};{b}m",
-                                r = lower[0],
-                                g = lower[1],
-                                b = lower[2]
-                            );
-                        }
-                    }
+                if last_upper.is_none() || &last_upper.unwrap() != upper {
+                    frame += &self.color(upper, true);
                 }
+
+                if last_lower.is_none() || &last_lower.unwrap() != lower {
+                    frame += &self.color(lower, false);
+                }
+
+                frame += "▀";
 
                 last_upper = Some(*upper);
                 last_lower = Some(*lower);
-
-                frame += "▀";
             }
             frame += "\n";
         }

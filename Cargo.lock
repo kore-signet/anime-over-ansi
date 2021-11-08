@@ -98,7 +98,7 @@ checksum = "ee10e43ae4a853c0a3591d4e2ada1719e553be18199d9da9d4a83f5927c2f5c7"
 [[package]]
 name = "argmm"
 version = "0.1.2"
-source = "git+https://github.com/alisww/argmm#c2a86e36448fa96bf2263f82c6108e32713bcd1b"
+source = "git+https://github.com/alisww/argmm#d73e1d11daccc6b5fdf36832a9135ee39095edc3"
 
 [[package]]
 name = "ascii"
