@@ -109,8 +109,8 @@ pub trait Encoder {
 }
 
 pub trait IOEncoder<W: Write>: Encoder {
-    fn write_frame(&mut self, img: &RgbImage) -> io::Result<()>;
-    fn finish(self) -> io::Result<(Vec<u64>, Vec<u32>, W)>;
+    fn write_frame(&mut self, img: &RgbImage, time: i64) -> io::Result<()>;
+    fn finish(self) -> io::Result<(Vec<u64>, Vec<u32>, Vec<i64>, W)>; // lengths, hashes, times, inner writer
 }
 
 pub struct FileEncoder<'a> {
@@ -119,6 +119,7 @@ pub struct FileEncoder<'a> {
     pub needs_color: ColorMode,
     pub frame_lengths: Vec<u64>,
     pub frame_hashes: Vec<u32>,
+    pub frame_times: Vec<i64>,
     pub output: OutputStream<'a>,
 }
 
@@ -137,16 +138,22 @@ impl Encoder for FileEncoder<'_> {
 }
 
 impl IOEncoder<fs::File> for FileEncoder<'_> {
-    fn write_frame(&mut self, img: &RgbImage) -> io::Result<()> {
+    fn write_frame(&mut self, img: &RgbImage, time: i64) -> io::Result<()> {
         let frame = self.encode_frame(img);
         let bytes = frame.as_bytes();
         self.frame_lengths.push(bytes.len() as u64);
         self.frame_hashes.push(adler32(&bytes));
+        self.frame_times.push(time);
         self.output.write_all(bytes)
     }
 
-    fn finish(self) -> io::Result<(Vec<u64>, Vec<u32>, fs::File)> {
-        Ok((self.frame_lengths, self.frame_hashes, self.output.finish()?))
+    fn finish(self) -> io::Result<(Vec<u64>, Vec<u32>, Vec<i64>, fs::File)> {
+        Ok((
+            self.frame_lengths,
+            self.frame_hashes,
+            self.frame_times,
+            self.output.finish()?,
+        ))
     }
 }
 

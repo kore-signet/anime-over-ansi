@@ -100,12 +100,13 @@ fn main() -> std::io::Result<()> {
         _ => panic!(),
     };
 
-    let mut encoder = Encoder {
+    let mut encoder = FileEncoder {
         needs_width: width,
         needs_height: height,
         needs_color: color_mode,
         frame_lengths: Vec::new(),
         frame_hashes: Vec::new(),
+        frame_times: Vec::new(),
         output: {
             let file = tempfile().unwrap();
             if compression_mode == CompressionMode::Zstd {
@@ -134,6 +135,7 @@ fn main() -> std::io::Result<()> {
         length: 0,
         frame_lengths: Vec::new(),
         frame_hashes: Vec::new(),
+        frame_times: Vec::new(),
     };
 
     let input_fs = File::open(matches.value_of("INPUT").unwrap()).unwrap();
@@ -142,6 +144,9 @@ fn main() -> std::io::Result<()> {
     let mut buffer: Vec<u8> = vec![0u8; width as usize * height as usize * color_mode.byte_size()];
 
     println!("reading frames!");
+
+    let mut i: i64 = 0;
+    let interval_nanos = (1000000000.0 / fps) as i64;
 
     loop {
         let read_res = input_r.read_exact(&mut buffer);
@@ -165,7 +170,10 @@ fn main() -> std::io::Result<()> {
             RgbImage::from_raw(width, height, transformed_buffer).expect("couldn't read image")
         };
 
-        encoder.encode_frame(&img).expect("couldn't write frame");
+        encoder
+            .write_frame(&img, interval_nanos * i)
+            .expect("couldn't write frame");
+        i += 1;
     }
 
     println!("done reading frames, encoding finished file");
@@ -173,12 +181,13 @@ fn main() -> std::io::Result<()> {
     let out_fs = File::create(matches.value_of("OUT").unwrap()).unwrap();
     let mut out_writer = BufWriter::new(out_fs);
 
-    let (frame_lengths, frame_hashes, mut file) = encoder.finish().unwrap();
+    let (frame_lengths, frame_hashes, frame_times, mut file) = encoder.finish().unwrap();
 
     file.flush().unwrap();
 
     track.frame_hashes = frame_hashes;
     track.frame_lengths = frame_lengths;
+    track.frame_times = frame_times;
     track.offset = 0;
     track.length = file.metadata().unwrap().len();
 

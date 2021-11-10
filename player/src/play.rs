@@ -128,9 +128,9 @@ async fn main() -> anyhow::Result<()> {
         tokio::pin!(reader);
         anime_telnet::player::play(
             reader,
-            video_track.framerate,
             video_track.frame_lengths,
             video_track.frame_hashes,
+            video_track.frame_times,
             &mut subtitles,
             tx,
         )
@@ -139,9 +139,9 @@ async fn main() -> anyhow::Result<()> {
         tokio::pin!(reader);
         anime_telnet::player::play(
             reader,
-            video_track.framerate,
             video_track.frame_lengths,
             video_track.frame_hashes,
+            video_track.frame_times,
             &mut subtitles,
             tx,
         )

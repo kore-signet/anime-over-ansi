@@ -202,6 +202,7 @@ fn main() -> std::io::Result<()> {
                     needs_color: color_mode,
                     frame_lengths: Vec::new(),
                     frame_hashes: Vec::new(),
+                    frame_times: Vec::new(),
                     output: {
                         let file = tempfile().unwrap();
                         if compression == CompressionMode::Zstd {
@@ -216,24 +217,25 @@ fn main() -> std::io::Result<()> {
                         }
                     },
                 },
-                VideoTrack {
-                    name: one_of_keys(&mut map, vec!["title", "n", "name"]),
-                    color_mode,
-                    height,
-                    width,
-                    compression,
-                    encode_time: SystemTime::now()
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs(),
-                    framerate: one_of_keys(&mut map, vec!["fps", "rate", "framerate", "r"])
-                        .map(|v| v.parse::<f64>().unwrap())
-                        .unwrap_or(ffmpeg_fps),
-                    offset: 0,
-                    length: 0,
-                    frame_lengths: Vec::new(),
-                    frame_hashes: Vec::new(),
-                },
+                VideoTrackBuilder::default()
+                    .name(one_of_keys(&mut map, vec!["title", "n", "name"]))
+                    .color_mode(color_mode)
+                    .height(height)
+                    .width(width)
+                    .compression(compression)
+                    .encode_time(
+                        SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                    )
+                    .framerate(
+                        one_of_keys(&mut map, vec!["fps", "rate", "framerate", "r"])
+                            .map(|v| v.parse::<f64>().unwrap())
+                            .unwrap_or(ffmpeg_fps),
+                    )
+                    .build()
+                    .unwrap(),
             )
         })
         .collect()
@@ -293,6 +295,7 @@ fn main() -> std::io::Result<()> {
                         needs_color: color_mode,
                         frame_lengths: Vec::new(),
                         frame_hashes: Vec::new(),
+                        frame_times: Vec::new(),
                         output: {
                             let file = tempfile().unwrap();
                             if compression == CompressionMode::Zstd {
@@ -305,22 +308,21 @@ fn main() -> std::io::Result<()> {
                             }
                         },
                     },
-                    VideoTrack {
-                        name: Some(track_name),
-                        color_mode,
-                        height,
-                        width,
-                        compression,
-                        encode_time: SystemTime::now()
-                            .duration_since(SystemTime::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs(),
-                        framerate: ffmpeg_fps,
-                        offset: 0,
-                        length: 0,
-                        frame_lengths: Vec::new(),
-                        frame_hashes: Vec::new(),
-                    },
+                    VideoTrackBuilder::default()
+                        .name(Some(track_name))
+                        .color_mode(color_mode)
+                        .height(height)
+                        .width(width)
+                        .compression(compression)
+                        .encode_time(
+                            SystemTime::now()
+                                .duration_since(SystemTime::UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs(),
+                        )
+                        .framerate(ffmpeg_fps)
+                        .build()
+                        .unwrap(),
                 ));
             }
         }
@@ -353,13 +355,13 @@ fn main() -> std::io::Result<()> {
                         .expect("couldn't guess subtitle format");
                 (
                     sfile,
-                    SubtitleTrack {
-                        name: one_of_keys(&mut map, vec!["name", "n", "title"]),
-                        lang: one_of_keys(&mut map, vec!["lang"]),
-                        format,
-                        offset: 0,
-                        length: s_len,
-                    },
+                    SubtitleTrackBuilder::default()
+                        .name(one_of_keys(&mut map, vec!["name", "n", "title"]))
+                        .lang(one_of_keys(&mut map, vec!["lang"]))
+                        .format(format)
+                        .length(s_len)
+                        .build()
+                        .unwrap(),
                 )
             })
             .collect()
@@ -399,13 +401,13 @@ fn main() -> std::io::Result<()> {
                             .expect("couldn't guess subtitle format");
                     subtitle_tracks.push((
                         sfile,
-                        SubtitleTrack {
-                            name: Some(track_name),
-                            lang: Some(track_lang),
-                            format,
-                            offset: 0,
-                            length: s_len,
-                        },
+                        SubtitleTrackBuilder::default()
+                            .name(Some(track_name))
+                            .lang(Some(track_lang))
+                            .format(format)
+                            .length(s_len)
+                            .build()
+                            .unwrap(),
                     ));
                 }
             }
@@ -437,7 +439,7 @@ fn main() -> std::io::Result<()> {
             .insert(e.needs_color);
     }
 
-    anime_telnet_encoder::encode(
+    anime_telnet_encoder::encode_to_files(
         &mut video_decoder,
         &mut demuxer,
         stream_index,
@@ -452,9 +454,10 @@ fn main() -> std::io::Result<()> {
     let mut done_subtitles: Vec<SubtitleTrack> = Vec::new();
 
     for (encoder, mut track) in video_tracks {
-        let (frame_lengths, frame_hashes, mut file) = encoder.finish().unwrap();
+        let (frame_lengths, frame_hashes, frame_times, mut file) = encoder.finish().unwrap();
         file.flush().unwrap();
 
+        track.frame_times = frame_times;
         track.frame_hashes = frame_hashes;
         track.frame_lengths = frame_lengths;
         track.offset = track_position;
