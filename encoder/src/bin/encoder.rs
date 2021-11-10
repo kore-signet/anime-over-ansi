@@ -152,7 +152,7 @@ fn main() -> std::io::Result<()> {
     let out_fs = File::create(matches.value_of("OUT").unwrap()).unwrap();
     let mut out_writer = BufWriter::new(out_fs);
 
-    let mut video_tracks: Vec<(Encoder, VideoTrack)> = if let Some(vals) =
+    let mut video_tracks: Vec<(FileEncoder, VideoTrack)> = if let Some(vals) =
         matches.values_of("track")
     {
         vals.map(|cfg| {
@@ -196,7 +196,7 @@ fn main() -> std::io::Result<()> {
                 .unwrap_or(CompressionMode::None);
 
             (
-                Encoder {
+                FileEncoder {
                     needs_width: width,
                     needs_height: height,
                     needs_color: color_mode,
@@ -238,7 +238,7 @@ fn main() -> std::io::Result<()> {
         })
         .collect()
     } else {
-        let mut video_tracks: Vec<(Encoder, VideoTrack)> = Vec::new();
+        let mut video_tracks: Vec<(FileEncoder, VideoTrack)> = Vec::new();
         let theme = dialoguer::theme::ColorfulTheme::default();
 
         loop {
@@ -287,7 +287,7 @@ fn main() -> std::io::Result<()> {
                 };
 
                 video_tracks.push((
-                    Encoder {
+                    FileEncoder {
                         needs_width: width,
                         needs_height: height,
                         needs_color: color_mode,

@@ -38,18 +38,13 @@ impl OutputStream<'_> {
     }
 }
 
-pub struct Encoder<'a> {
-    pub needs_width: u32,
-    pub needs_height: u32,
-    pub needs_color: ColorMode,
-    pub frame_lengths: Vec<u64>,
-    pub frame_hashes: Vec<u32>,
-    pub output: OutputStream<'a>,
-}
+pub trait Encoder {
+    fn needs_width(&self) -> u32;
+    fn needs_height(&self) -> u32;
+    fn needs_color(&self) -> ColorMode;
 
-impl Encoder<'_> {
     fn color(&self, pixel: &Rgb<u8>, fg: bool) -> String {
-        match self.needs_color {
+        match self.needs_color() {
             ColorMode::EightBit => {
                 if fg {
                     format!(
@@ -83,8 +78,7 @@ impl Encoder<'_> {
         }
     }
 
-    // todo: stop using rgbimage here and use a raw vec<u8> which can be 8bit or 24bit
-    pub fn encode_frame(&mut self, img: &RgbImage) -> io::Result<()> {
+    fn encode_frame(&self, img: &RgbImage) -> String {
         let mut last_upper: Option<Rgb<u8>> = None;
         let mut last_lower: Option<Rgb<u8>> = None;
 
@@ -110,13 +104,48 @@ impl Encoder<'_> {
             frame += "\n";
         }
 
+        frame
+    }
+}
+
+pub trait IOEncoder<W: Write>: Encoder {
+    fn write_frame(&mut self, img: &RgbImage) -> io::Result<()>;
+    fn finish(self) -> io::Result<(Vec<u64>, Vec<u32>, W)>;
+}
+
+pub struct FileEncoder<'a> {
+    pub needs_width: u32,
+    pub needs_height: u32,
+    pub needs_color: ColorMode,
+    pub frame_lengths: Vec<u64>,
+    pub frame_hashes: Vec<u32>,
+    pub output: OutputStream<'a>,
+}
+
+impl Encoder for FileEncoder<'_> {
+    fn needs_color(&self) -> ColorMode {
+        self.needs_color
+    }
+
+    fn needs_height(&self) -> u32 {
+        self.needs_height
+    }
+
+    fn needs_width(&self) -> u32 {
+        self.needs_width
+    }
+}
+
+impl IOEncoder<fs::File> for FileEncoder<'_> {
+    fn write_frame(&mut self, img: &RgbImage) -> io::Result<()> {
+        let frame = self.encode_frame(img);
         let bytes = frame.as_bytes();
         self.frame_lengths.push(bytes.len() as u64);
         self.frame_hashes.push(adler32(&bytes));
         self.output.write_all(bytes)
     }
 
-    pub fn finish(self) -> io::Result<(Vec<u64>, Vec<u32>, fs::File)> {
+    fn finish(self) -> io::Result<(Vec<u64>, Vec<u32>, fs::File)> {
         Ok((self.frame_lengths, self.frame_hashes, self.output.finish()?))
     }
 }

@@ -92,7 +92,7 @@ pub fn encode(
     demuxer: &mut Demuxer<std::fs::File>,
     stream_index: usize,
     pipelines: &Vec<ProcessorPipeline>,
-    tracks: &mut Vec<(Encoder, VideoTrack)>,
+    tracks: &mut Vec<(FileEncoder, VideoTrack)>,
     show_progress: bool,
 ) -> std::io::Result<()> {
     let encoder_bar = ProgressBar::new_spinner();
@@ -119,7 +119,7 @@ pub fn encode(
         for msg in rcv_resized.iter() {
             for (encoder, _) in tracks.iter_mut() {
                 encoder
-                    .encode_frame(
+                    .write_frame(
                         &msg[msg
                             .iter()
                             .position(|v| {
@@ -138,7 +138,7 @@ pub fn encode(
         }
 
         encoder_bar.finish_at_current_pos();
-        println!("finished encoding; writing final file..");
+        println!("finished encoding; writing finished file..");
     })
     .unwrap();
 

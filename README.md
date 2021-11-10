@@ -1,5 +1,6 @@
-# allie's ANSI anime experience - experiments branch
+# ansi.moe
 code to encode video into ANSI escape sequences, then play it back at the proper framerate and optionally with subtitles.
+[it has a spec!](https://ansi.moe/spec.html)
 
 ## note - this is the experiments branch!
 the current experiment is adding multi-track container support to the output files.
@@ -7,9 +8,6 @@ the player currently does not support this and thus is broken in this branch, an
 
 ## tips
 ```bash
-# serve video over tcp
-./target/release/player video.txt | nc -l 2323
-
 # encoder syntax
 ./target/release/encoder \
 --track=color:256,compression:zstd,width:192,height:108,name:eightbit \
@@ -18,4 +16,5 @@ input.mkv out.ansi
 ```
 
 ### todos
-- improve frame extraction
+- live encoder
+- live subtitles
