@@ -75,6 +75,7 @@
             <li>'height' - height of the video track</li>
             <li>'encode_time' - time track was encoded, in seconds since the unix epoch </li>
             <li>'frame_lengths' - length of every frame, in order, in bytes. used for reading each frame</li>
+            <li>'frame_hashes' - Adler32 hash of every frame's data (as uncompressed UTF8 bytes), in order.</li>
             <li>'offset' - offset track data starts at (does not account for the size of the metadata)</li>
             <li>'length' - length in bytes of the track data</li>
         </ul>
