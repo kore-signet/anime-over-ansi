@@ -1,6 +1,7 @@
 use std::pin::Pin;
 
-use std::time::{Duration, Instant};
+use simd_adler32::adler32;
+use std::time::Duration;
 use subparse::SubtitleEntry;
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
@@ -12,6 +13,7 @@ pub async fn play<T>(
     mut reader: Pin<&mut T>,
     framerate: f64,
     frame_lengths: Vec<u64>,
+    frame_hashes: Vec<u32>,
     subtitles: &mut Vec<SubtitleEntry>,
     tx: broadcast::Sender<Vec<u8>>,
 ) -> anyhow::Result<()>
@@ -25,11 +27,14 @@ where
     // print!("\x1B[2J\x1B[1;1H");
 
     let mut i = 0;
-    let _last = Instant::now();
 
     while i < frame_lengths.len() - 1 {
         let mut next_frame = vec![0; frame_lengths[i] as usize];
         reader.read_exact(&mut next_frame).await?;
+        let hash = adler32(&next_frame.as_slice());
+        if hash != frame_hashes[i] {
+            panic!("detected corrupted data at frame {}", i);
+        }
 
         tx.send(b"\x1B[1;1H".to_vec())?;
         tx.send(next_frame)?;

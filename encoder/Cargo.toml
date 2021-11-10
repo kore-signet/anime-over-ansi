@@ -7,7 +7,6 @@ edition = "2018"
 
 [dependencies]
 lazy_static = "1.4.0"
-image = "0.23.14"
 clap = "2.33.3"
 subparse = "0.7.0"
 tempfile = "3.2.0"
@@ -19,10 +18,12 @@ dialoguer = "0.9"
 anyhow = "1.0.45"
 crossbeam = "0.8.1"
 
-[dependencies.opencv]
-version = "0.60.0"
-features = ["videoio","imgproc"]
+[dependencies.image]
+version = "0.23.14"
 default-features = false
+
+[dependencies.ac-ffmpeg]
+git = "https://github.com/alisww/rust-ac-ffmpeg.git"
 
 [dependencies.anime_telnet]
 path = "../anime_lib"

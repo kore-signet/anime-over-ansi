@@ -162,6 +162,7 @@ async fn main() -> anyhow::Result<()> {
             reader,
             video_track.framerate,
             video_track.frame_lengths,
+            video_track.frame_hashes,
             &mut subtitles,
             tx,
         )
@@ -172,6 +173,7 @@ async fn main() -> anyhow::Result<()> {
             reader,
             video_track.framerate,
             video_track.frame_lengths,
+            video_track.frame_hashes,
             &mut subtitles,
             tx,
         )

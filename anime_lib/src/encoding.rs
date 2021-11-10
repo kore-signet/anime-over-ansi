@@ -8,6 +8,7 @@ use image::{
     imageops::{self},
     Rgb, RgbImage, RgbaImage,
 };
+use simd_adler32::adler32;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Write};
@@ -37,16 +38,47 @@ impl OutputStream<'_> {
     }
 }
 
-pub struct Encoder<'a> {
-    pub needs_width: u32,
-    pub needs_height: u32,
-    pub needs_color: ColorMode,
-    pub frame_lengths: Vec<u64>,
-    pub output: OutputStream<'a>,
-}
+pub trait Encoder {
+    fn needs_width(&self) -> u32;
+    fn needs_height(&self) -> u32;
+    fn needs_color(&self) -> ColorMode;
 
-impl Encoder<'_> {
-    pub fn encode_frame(&mut self, img: &RgbImage) -> io::Result<()> {
+    fn color(&self, pixel: &Rgb<u8>, fg: bool) -> String {
+        match self.needs_color() {
+            ColorMode::EightBit => {
+                if fg {
+                    format!(
+                        "\x1B[38;5;{}m",
+                        REVERSE_PALETTE[&(pixel[0], pixel[1], pixel[2])]
+                    )
+                } else {
+                    format!(
+                        "\x1B[48;5;{}m",
+                        REVERSE_PALETTE[&(pixel[0], pixel[1], pixel[2])]
+                    )
+                }
+            }
+            _ => {
+                if fg {
+                    format!(
+                        "\x1B[38;2;{r};{g};{b}m",
+                        r = pixel[0],
+                        g = pixel[1],
+                        b = pixel[2]
+                    )
+                } else {
+                    format!(
+                        "\x1B[48;2;{r};{g};{b}m",
+                        r = pixel[0],
+                        g = pixel[1],
+                        b = pixel[2]
+                    )
+                }
+            }
+        }
+    }
+
+    fn encode_frame(&self, img: &RgbImage) -> String {
         let mut last_upper: Option<Rgb<u8>> = None;
         let mut last_lower: Option<Rgb<u8>> = None;
 
@@ -56,58 +88,65 @@ impl Encoder<'_> {
                 let upper = img.get_pixel(x, y);
                 let lower = img.get_pixel(x, y + 1);
 
-                match self.needs_color {
-                    ColorMode::EightBit => {
-                        if last_upper.is_none() || &last_upper.unwrap() != upper {
-                            frame += &format!(
-                                "\x1B[38;5;{}m",
-                                REVERSE_PALETTE[&(upper[0], upper[1], upper[2])]
-                            );
-                        }
-
-                        if last_lower.is_none() || &last_lower.unwrap() != lower {
-                            frame += &format!(
-                                "\x1B[48;5;{}m",
-                                REVERSE_PALETTE[&(lower[0], lower[1], lower[2])]
-                            );
-                        }
-                    }
-                    ColorMode::True => {
-                        if last_upper.is_none() || &last_upper.unwrap() != upper {
-                            frame += &format!(
-                                "\x1B[38;2;{r};{g};{b}m",
-                                r = upper[0],
-                                g = upper[1],
-                                b = upper[2]
-                            );
-                        }
-
-                        if last_lower.is_none() || &last_lower.unwrap() != lower {
-                            frame += &format!(
-                                "\x1B[48;2;{r};{g};{b}m",
-                                r = lower[0],
-                                g = lower[1],
-                                b = lower[2]
-                            );
-                        }
-                    }
+                if last_upper.is_none() || &last_upper.unwrap() != upper {
+                    frame += &self.color(upper, true);
                 }
+
+                if last_lower.is_none() || &last_lower.unwrap() != lower {
+                    frame += &self.color(lower, false);
+                }
+
+                frame += "▀";
 
                 last_upper = Some(*upper);
                 last_lower = Some(*lower);
-
-                frame += "▀";
             }
             frame += "\n";
         }
 
+        frame
+    }
+}
+
+pub trait IOEncoder<W: Write>: Encoder {
+    fn write_frame(&mut self, img: &RgbImage) -> io::Result<()>;
+    fn finish(self) -> io::Result<(Vec<u64>, Vec<u32>, W)>;
+}
+
+pub struct FileEncoder<'a> {
+    pub needs_width: u32,
+    pub needs_height: u32,
+    pub needs_color: ColorMode,
+    pub frame_lengths: Vec<u64>,
+    pub frame_hashes: Vec<u32>,
+    pub output: OutputStream<'a>,
+}
+
+impl Encoder for FileEncoder<'_> {
+    fn needs_color(&self) -> ColorMode {
+        self.needs_color
+    }
+
+    fn needs_height(&self) -> u32 {
+        self.needs_height
+    }
+
+    fn needs_width(&self) -> u32 {
+        self.needs_width
+    }
+}
+
+impl IOEncoder<fs::File> for FileEncoder<'_> {
+    fn write_frame(&mut self, img: &RgbImage) -> io::Result<()> {
+        let frame = self.encode_frame(img);
         let bytes = frame.as_bytes();
         self.frame_lengths.push(bytes.len() as u64);
+        self.frame_hashes.push(adler32(&bytes));
         self.output.write_all(bytes)
     }
 
-    pub fn finish(self) -> io::Result<(Vec<u64>, fs::File)> {
-        Ok((self.frame_lengths, self.output.finish()?))
+    fn finish(self) -> io::Result<(Vec<u64>, Vec<u32>, fs::File)> {
+        Ok((self.frame_lengths, self.frame_hashes, self.output.finish()?))
     }
 }
 
@@ -134,7 +173,7 @@ impl ProcessorPipeline {
             src_image.pixel_type(),
         );
         let mut dst_view = dst_image.view_mut();
-        let mut resizer = fr::Resizer::new(fr::ResizeAlg::Convolution(fr::FilterType::Lanczos3));
+        let mut resizer = fr::Resizer::new(fr::ResizeAlg::Convolution(self.filter));
         resizer.resize(&src_image.view(), &mut dst_view).unwrap();
 
         let frame: RgbImage =
