@@ -1,19 +1,27 @@
+#![allow(warnings)]
+
 use anime_telnet::{encoding::*, metadata::*};
+use anime_telnet_encoder::{ANSIVideoEncoder, PacketCodec};
 use clap::Arg;
 
+use cyanotype::*;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, prelude::*, BufWriter};
 use std::path::Path;
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
-
-use ac_ffmpeg::codec::video::VideoDecoder;
-use ac_ffmpeg::format::demuxer::Demuxer;
-use ac_ffmpeg::format::io::IO as FfmpegIO;
+use tokio_util::codec::FramedWrite;
 
 use fast_image_resize as fr;
 
 use tempfile::tempfile;
+
+use futures::io::{AsyncWrite, AsyncWriteExt};
+use futures::sink::{Sink, SinkExt};
+use futures::stream::{Stream, StreamExt};
+use image::RgbImage;
+use indicatif::{ProgressBar, ProgressStyle};
 
 // gets and removes value from hashmap for whichever one of the keys exists in it
 fn one_of_keys(map: &mut HashMap<String, String>, keys: Vec<&'static str>) -> Option<String> {
@@ -26,7 +34,8 @@ fn one_of_keys(map: &mut HashMap<String, String>, keys: Vec<&'static str>) -> Op
     None
 }
 
-fn main() -> std::io::Result<()> {
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
     let matches = clap::App::new("ansi.moe encoder")
         .version("1.0")
         .author("allie signet <allie@cat-girl.gay>")
@@ -129,32 +138,14 @@ fn main() -> std::io::Result<()> {
     });
 
     let input_file = File::open(matches.value_of("INPUT").unwrap()).unwrap();
-    let ffmpeg_io = FfmpegIO::from_seekable_read_stream(input_file);
-    let mut demuxer = Demuxer::builder()
-        .build(ffmpeg_io)
-        .unwrap()
-        .find_stream_info(Some(Duration::from_secs(40)))
-        .ok()
-        .unwrap();
-
-    let (stream_index, (stream, _)) = demuxer
-        .streams()
-        .iter()
-        .map(|stream| (stream, stream.codec_parameters()))
-        .enumerate()
-        .find(|(_, (_, params))| params.is_video_codec())
-        .unwrap();
-
-    let ffmpeg_fps = stream.real_frame_rate().unwrap();
-
-    let mut video_decoder = VideoDecoder::from_stream(stream).unwrap().build().unwrap();
+    let mut demuxer = Demuxer::from_seek(input_file).unwrap();
 
     let out_fs = File::create(matches.value_of("OUT").unwrap()).unwrap();
     let mut out_writer = BufWriter::new(out_fs);
 
-    let mut video_tracks: Vec<(FileEncoder, VideoTrack)> = if let Some(vals) =
-        matches.values_of("track")
-    {
+    let mut track_index: i32 = -1;
+
+    let (encoders, video_tracks) = if let Some(vals) = matches.values_of("track") {
         vals.map(|cfg| {
             let mut map: HashMap<String, String> = cfg
                 .split_terminator(',')
@@ -195,26 +186,17 @@ fn main() -> std::io::Result<()> {
                 })
                 .unwrap_or(CompressionMode::None);
 
+            track_index += 1;
+
             (
-                FileEncoder {
-                    needs_width: width,
-                    needs_height: height,
-                    needs_color: color_mode,
-                    frame_lengths: Vec::new(),
-                    frame_hashes: Vec::new(),
-                    frame_times: Vec::new(),
-                    output: {
-                        let file = tempfile().unwrap();
-                        if compression == CompressionMode::Zstd {
-                            OutputStream::CompressedFile({
-                                let encoder =
-                                    zstd::Encoder::new(file, compression_level.unwrap_or(3))
-                                        .unwrap();
-                                encoder
-                            })
-                        } else {
-                            OutputStream::File(file)
-                        }
+                ANSIVideoEncoder {
+                    stream_index: track_index as u32,
+                    width: width,
+                    height: height,
+                    color_mode: color_mode,
+                    encoder_opts: EncoderOptions {
+                        compression_level: Some(3),
+                        compression_mode: compression,
                     },
                 },
                 VideoTrackBuilder::default()
@@ -223,24 +205,21 @@ fn main() -> std::io::Result<()> {
                     .height(height)
                     .width(width)
                     .compression(compression)
+                    .index(track_index as u32)
                     .encode_time(
                         SystemTime::now()
                             .duration_since(SystemTime::UNIX_EPOCH)
                             .unwrap()
                             .as_secs(),
                     )
-                    .framerate(
-                        one_of_keys(&mut map, vec!["fps", "rate", "framerate", "r"])
-                            .map(|v| v.parse::<f64>().unwrap())
-                            .unwrap_or(ffmpeg_fps),
-                    )
                     .build()
                     .unwrap(),
             )
         })
-        .collect()
+        .unzip()
     } else {
-        let mut video_tracks: Vec<(FileEncoder, VideoTrack)> = Vec::new();
+        let mut video_tracks: Vec<VideoTrack> = Vec::new();
+        let mut encoders: Vec<ANSIVideoEncoder> = Vec::new();
         let theme = dialoguer::theme::ColorfulTheme::default();
 
         loop {
@@ -288,132 +267,41 @@ fn main() -> std::io::Result<()> {
                     _ => panic!(),
                 };
 
-                video_tracks.push((
-                    FileEncoder {
-                        needs_width: width,
-                        needs_height: height,
-                        needs_color: color_mode,
-                        frame_lengths: Vec::new(),
-                        frame_hashes: Vec::new(),
-                        frame_times: Vec::new(),
-                        output: {
-                            let file = tempfile().unwrap();
-                            if compression == CompressionMode::Zstd {
-                                OutputStream::CompressedFile({
-                                    let encoder = zstd::Encoder::new(file, 3).unwrap();
-                                    encoder
-                                })
-                            } else {
-                                OutputStream::File(file)
-                            }
-                        },
+                track_index += 1;
+
+                encoders.push(ANSIVideoEncoder {
+                    stream_index: track_index as u32,
+                    width: width,
+                    height: height,
+                    color_mode: color_mode,
+                    encoder_opts: EncoderOptions {
+                        compression_level: Some(3),
+                        compression_mode: compression,
                     },
+                });
+
+                video_tracks.push(
                     VideoTrackBuilder::default()
                         .name(Some(track_name))
                         .color_mode(color_mode)
                         .height(height)
                         .width(width)
                         .compression(compression)
+                        .index(track_index as u32)
                         .encode_time(
                             SystemTime::now()
                                 .duration_since(SystemTime::UNIX_EPOCH)
                                 .unwrap()
                                 .as_secs(),
                         )
-                        .framerate(ffmpeg_fps)
                         .build()
                         .unwrap(),
-                ));
+                );
             }
         }
 
-        video_tracks
+        (encoders, video_tracks)
     };
-
-    let subtitle_tracks: Vec<(File, SubtitleTrack)> =
-        if let Some(vals) = matches.values_of("subtitle_track") {
-            vals.map(|cfg| {
-                let mut map: HashMap<String, String> = cfg
-                    .split_terminator(',')
-                    .map(|line| {
-                        line.split_once(':')
-                            .map(|(k, v)| (k.to_owned(), v.to_owned()))
-                            .unwrap()
-                    })
-                    .collect();
-
-                let file_name = one_of_keys(&mut map, vec!["source", "file", "f"])
-                    .expect("please specify a subtitle file!");
-                let mut sfile = File::open(&file_name).unwrap();
-                let s_len = sfile.metadata().unwrap().len();
-                let mut contents: Vec<u8> = Vec::with_capacity(s_len as usize);
-                sfile.read_to_end(&mut contents).unwrap();
-                sfile.rewind().unwrap();
-
-                let format =
-                    subparse::get_subtitle_format(Path::new(&file_name).extension(), &contents)
-                        .expect("couldn't guess subtitle format");
-                (
-                    sfile,
-                    SubtitleTrackBuilder::default()
-                        .name(one_of_keys(&mut map, vec!["name", "n", "title"]))
-                        .lang(one_of_keys(&mut map, vec!["lang"]))
-                        .format(format)
-                        .length(s_len)
-                        .build()
-                        .unwrap(),
-                )
-            })
-            .collect()
-        } else {
-            let mut subtitle_tracks: Vec<(File, SubtitleTrack)> = Vec::new();
-            let theme = dialoguer::theme::ColorfulTheme::default();
-
-            loop {
-                let add_track = dialoguer::Select::with_theme(&theme)
-                    .with_prompt("add a subtitle track?")
-                    .items(&["yes!", "finish subtitle track configuration"])
-                    .interact()
-                    .unwrap();
-                if add_track == 1 {
-                    break;
-                } else {
-                    let track_name: String = dialoguer::Input::with_theme(&theme)
-                        .with_prompt("track name")
-                        .interact_text()
-                        .unwrap();
-                    let track_lang: String = dialoguer::Input::with_theme(&theme)
-                        .with_prompt("track language")
-                        .interact_text()
-                        .unwrap();
-                    let file_name: String = dialoguer::Input::with_theme(&theme)
-                        .with_prompt("subtitle file")
-                        .interact_text()
-                        .unwrap();
-                    let mut sfile = File::open(&file_name).unwrap();
-                    let s_len = sfile.metadata().unwrap().len();
-                    let mut contents: Vec<u8> = Vec::with_capacity(s_len as usize);
-                    sfile.read_to_end(&mut contents).unwrap();
-                    sfile.rewind().unwrap();
-
-                    let format =
-                        subparse::get_subtitle_format(Path::new(&file_name).extension(), &contents)
-                            .expect("couldn't guess subtitle format");
-                    subtitle_tracks.push((
-                        sfile,
-                        SubtitleTrackBuilder::default()
-                            .name(Some(track_name))
-                            .lang(Some(track_lang))
-                            .format(format)
-                            .length(s_len)
-                            .build()
-                            .unwrap(),
-                    ));
-                }
-            }
-            subtitle_tracks
-        };
-
     let resize_filter = match matches.value_of("resize").unwrap_or("hamming") {
         "nearest" => fr::FilterType::Box,
         "bilinear" => fr::FilterType::Bilinear,
@@ -426,72 +314,221 @@ fn main() -> std::io::Result<()> {
 
     let mut processor_pipeline: HashMap<(u32, u32), ProcessorPipeline> = HashMap::new();
 
-    for (e, _) in video_tracks.iter() {
+    for e in encoders.iter() {
         processor_pipeline
-            .entry((e.needs_width, e.needs_height))
+            .entry((e.width, e.height))
             .or_insert(ProcessorPipeline {
-                width: e.needs_width,
-                height: e.needs_height,
+                width: e.width,
+                height: e.height,
                 filter: resize_filter,
                 color_modes: HashSet::new(),
             })
             .color_modes
-            .insert(e.needs_color);
+            .insert(e.color_mode);
     }
 
-    anime_telnet_encoder::encode_to_files(
-        &mut video_decoder,
-        &mut demuxer,
-        stream_index,
-        &processor_pipeline.into_iter().map(|(_, p)| p).collect(),
-        &mut video_tracks,
-        true,
-    )?;
+    let mut video_stream = demuxer.subscribe_to_video(0).unwrap();
 
-    let mut track_position = 0;
-    let mut track_files: Vec<File> = Vec::new();
-    let mut done_tracks: Vec<VideoTrack> = Vec::new();
-    let mut done_subtitles: Vec<SubtitleTrack> = Vec::new();
+    let demuxer_task = tokio::task::spawn(async move {
+        demuxer.run().await.unwrap();
+    });
 
-    for (encoder, mut track) in video_tracks {
-        let (frame_lengths, frame_hashes, frame_times, mut file) = encoder.finish().unwrap();
-        file.flush().unwrap();
+    let mut pipelines: Vec<ProcessorPipeline> =
+        processor_pipeline.into_iter().map(|(k, v)| v).collect();
 
-        track.frame_times = frame_times;
-        track.frame_hashes = frame_hashes;
-        track.frame_lengths = frame_lengths;
-        track.offset = track_position;
-        track.length = file.metadata().unwrap().len();
+    let encoder_bar = ProgressBar::new_spinner();
+    encoder_bar.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner} {per_sec:5!}fps - encoding frame {pos}"),
+    );
+    encoder_bar.enable_steady_tick(200);
 
-        track_position += track.length;
+    let mut resized_stream = video_stream
+        .enumerate()
+        .map(|(i, img)| {
+            let time = img.time;
+            (
+                i,
+                pipelines
+                    .iter()
+                    .flat_map(move |p| {
+                        p.process(&img.frame).into_iter().map(move |r| {
+                            ((p.width, p.height, r.0), VideoPacket { frame: r.1, time })
+                        })
+                    })
+                    .collect::<HashMap<(u32, u32, ColorMode), VideoPacket<RgbImage>>>(),
+            )
+        })
+        .flat_map(|(i, frames)| {
+            encoder_bar.set_position(i as u64);
 
-        file.rewind().unwrap();
+            futures::stream::iter(encoders.iter().map(move |encoder| {
+                Ok(encoder
+                    .encode_frame(&frames[&(encoder.width, encoder.height, encoder.color_mode)]))
+            }))
+        });
 
-        track_files.push(file);
-        done_tracks.push(track);
-    }
+    let out_stream = FramedWrite::new(
+        tokio::fs::File::create("out.ansi").await.unwrap(),
+        PacketCodec::new(),
+    )
+    .buffer(256);
 
-    for (file, mut track) in subtitle_tracks {
-        track.offset = track_position;
-        track_position += track.length;
+    resized_stream.forward(out_stream).await;
+    // .split();
+    // .for_each(|_| futures::future::ready(()))
+    // .await;
 
-        track_files.push(file);
-        done_subtitles.push(track)
-    }
+    // .map(|(width, height, color_mode, packet)| {
 
-    let metadata_bytes = serde_json::to_vec(&VideoMetadata {
-        video_tracks: done_tracks,
-        subtitle_tracks: done_subtitles,
-    })
-    .unwrap();
-    out_writer
-        .write_all(&(metadata_bytes.len() as u64).to_be_bytes())
-        .unwrap();
-    out_writer.write_all(&metadata_bytes).unwrap();
+    //     encoders
+    //         .iter()
+    //         .filter(|e| {
+    //             e.width == width && e.height == height && e.color_mode == color_mode
+    //         })
+    //         .map(|encoder| encoder.encode_frame(&packet))
+    // });
 
-    for mut file in track_files {
-        io::copy(&mut file, &mut out_writer).unwrap();
-    }
+    let mut idx = 0;
 
+    // let subtitle_tracks: Vec<(File, SubtitleTrack)> =
+    //     if let Some(vals) = matches.values_of("subtitle_track") {
+    //         vals.map(|cfg| {
+    //             let mut map: HashMap<String, String> = cfg
+    //                 .split_terminator(',')
+    //                 .map(|line| {
+    //                     line.split_once(':')
+    //                         .map(|(k, v)| (k.to_owned(), v.to_owned()))
+    //                         .unwrap()
+    //                 })
+    //                 .collect();
+
+    //             let file_name = one_of_keys(&mut map, vec!["source", "file", "f"])
+    //                 .expect("please specify a subtitle file!");
+    //             let mut sfile = File::open(&file_name).unwrap();
+    //             let s_len = sfile.metadata().unwrap().len();
+    //             let mut contents: Vec<u8> = Vec::with_capacity(s_len as usize);
+    //             sfile.read_to_end(&mut contents).unwrap();
+    //             sfile.rewind().unwrap();
+
+    //             let format =
+    //                 subparse::get_subtitle_format(Path::new(&file_name).extension(), &contents)
+    //                     .expect("couldn't guess subtitle format");
+    //             (
+    //                 sfile,
+    //                 SubtitleTrackBuilder::default()
+    //                     .name(one_of_keys(&mut map, vec!["name", "n", "title"]))
+    //                     .lang(one_of_keys(&mut map, vec!["lang"]))
+    //                     .format(format)
+    //                     .length(s_len)
+    //                     .build()
+    //                     .unwrap(),
+    //             )
+    //         })
+    //         .collect()
+    //     } else {
+    //         let mut subtitle_tracks: Vec<(File, SubtitleTrack)> = Vec::new();
+    //         let theme = dialoguer::theme::ColorfulTheme::default();
+
+    //         loop {
+    //             let add_track = dialoguer::Select::with_theme(&theme)
+    //                 .with_prompt("add a subtitle track?")
+    //                 .items(&["yes!", "finish subtitle track configuration"])
+    //                 .interact()
+    //                 .unwrap();
+    //             if add_track == 1 {
+    //                 break;
+    //             } else {
+    //                 let track_name: String = dialoguer::Input::with_theme(&theme)
+    //                     .with_prompt("track name")
+    //                     .interact_text()
+    //                     .unwrap();
+    //                 let track_lang: String = dialoguer::Input::with_theme(&theme)
+    //                     .with_prompt("track language")
+    //                     .interact_text()
+    //                     .unwrap();
+    //                 let file_name: String = dialoguer::Input::with_theme(&theme)
+    //                     .with_prompt("subtitle file")
+    //                     .interact_text()
+    //                     .unwrap();
+    //                 let mut sfile = File::open(&file_name).unwrap();
+    //                 let s_len = sfile.metadata().unwrap().len();
+    //                 let mut contents: Vec<u8> = Vec::with_capacity(s_len as usize);
+    //                 sfile.read_to_end(&mut contents).unwrap();
+    //                 sfile.rewind().unwrap();
+
+    //                 let format =
+    //                     subparse::get_subtitle_format(Path::new(&file_name).extension(), &contents)
+    //                         .expect("couldn't guess subtitle format");
+    //                 subtitle_tracks.push((
+    //                     sfile,
+    //                     SubtitleTrackBuilder::default()
+    //                         .name(Some(track_name))
+    //                         .lang(Some(track_lang))
+    //                         .format(format)
+    //                         .length(s_len)
+    //                         .build()
+    //                         .unwrap(),
+    //                 ));
+    //             }
+    //         }
+    //         subtitle_tracks
+    //     };
+
+    // while let Some(f) = resized_stream.next().await {
+
+    // }
+
+    demuxer_task.await;
+
+    encoder_bar.finish_at_current_pos();
+    // println!("finished encoding; writing finished file..");
+
+    // let mut track_position = 0;
+    // let mut track_files: Vec<File> = Vec::new();
+    // let mut done_tracks: Vec<VideoTrack> = Vec::new();
+    // let mut done_subtitles: Vec<SubtitleTrack> = Vec::new();
+
+    // for (encoder, mut track) in video_tracks {
+    //     let (frame_lengths, frame_hashes, frame_times, mut file) = encoder.finish().unwrap();
+    //     file.flush().unwrap();
+
+    //     track.frame_times = frame_times;
+    //     track.frame_hashes = frame_hashes;
+    //     track.frame_lengths = frame_lengths;
+    //     track.offset = track_position;
+    //     track.length = file.metadata().unwrap().len();
+
+    //     track_position += track.length;
+
+    //     file.rewind().unwrap();
+
+    //     track_files.push(file);
+    //     done_tracks.push(track);
+    // }
+
+    // for (file, mut track) in subtitle_tracks {
+    //     track.offset = track_position;
+    //     track_position += track.length;
+
+    //     track_files.push(file);
+    //     done_subtitles.push(track)
+    // }
+
+    // let metadata_bytes = serde_json::to_vec(&VideoMetadata {
+    //     video_tracks: done_tracks,
+    //     subtitle_tracks: done_subtitles,
+    // })
+    // .unwrap();
+    // out_writer
+    //     .write_all(&(metadata_bytes.len() as u64).to_be_bytes())
+    //     .unwrap();
+    // out_writer.write_all(&metadata_bytes).unwrap();
+
+    // for mut file in track_files {
+    //     io::copy(&mut file, &mut out_writer).unwrap();
+    // }
+
+    // Ok(())
     Ok(())
 }

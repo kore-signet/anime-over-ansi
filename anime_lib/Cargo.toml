@@ -3,17 +3,14 @@ name = "anime_telnet"
 version = "0.1.0"
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 lazy_static = "1.4.0"
 subparse = "0.7.0"
-zstd = "0.7"
+zstd = "0.9"
 fast_image_resize = "0.4.0"
-anyhow = "1.0.45"
-simd-adler32 = "0.3.4"
 lab = "0.11.0"
 derive_builder = "0.10.2"
+simd-adler32 = "0.3.4"
 
 [dependencies.argmm]
 git = "https://github.com/alisww/argmm"
@@ -21,10 +18,6 @@ git = "https://github.com/alisww/argmm"
 [dependencies.image]
 version = "0.23.14"
 default-features = false
-
-[dependencies.tokio]
-version = "1.13"
-features = ["io-util","time"]
 
 [dependencies.serde]
 version = "1"

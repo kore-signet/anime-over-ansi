@@ -2,9 +2,8 @@
 code to encode video into ANSI escape sequences, then play it back at the proper framerate and optionally with subtitles.
 [it has a spec!](https://ansi.moe/spec.html)
 
-## note - this is the experiments branch!
-the current experiment is adding multi-track container support to the output files.
-the player currently does not support this and thus is broken in this branch, and the encoder is a work-in-progress.
+# async branch
+this is extremely wip
 
 ## tips
 ```bash

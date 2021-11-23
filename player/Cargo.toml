@@ -11,32 +11,39 @@ image = "0.23.14"
 clap = "2.33.3"
 subparse = "0.7.0"
 tempfile = "3.2.0"
-zstd = "0.7"
+zstd = "0.9"
 serde_json = "1"
 fast_image_resize = "0.4.0"
 dialoguer = "0.9"
 anyhow = "1.0.45"
+simd-adler32 = "0.3.4"
+bytes = "1.1.0"
+futures = "0.3"
 
 [dependencies.anime_telnet]
 path = "../anime_lib"
-
-[dependencies.async-compression]
-version = "0.3.8"
-features = ["tokio","zstd"]
 
 [dependencies.tokio]
 version = "1.13"
 features = ["io-std","net","time","macros","sync","io-util","fs","rt-multi-thread"]
 
+[dependencies.tokio-util]
+version = "0.6.9"
+features = ["codec"]
+
 [dependencies.serde]
 version = "1"
 features = ["derive"]
 
-[[bin]]
-name = "player"
-path = "src/play.rs"
+# [[bin]]
+# name = "player"
+# path = "src/play.rs"
+
+# [[bin]]
+# name = "server"
+# path = "src/server.rs"
 
 [[bin]]
-name = "server"
-path = "src/server.rs"
+name = "packet_decoder"
+path = "src/bin/packet_decoder.rs"
 
