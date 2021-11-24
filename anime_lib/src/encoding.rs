@@ -1,12 +1,12 @@
 use super::{
     metadata::{ColorMode, CompressionMode},
-    palette::LABAnsiColorMap,
+    palette::{LABAnsiColorMap, REVERSE_PALETTE},
 };
 use fast_image_resize as fr;
 use image::{
     buffer::ConvertBuffer,
     imageops::{self},
-    RgbImage, RgbaImage,
+    Rgb, RgbImage, RgbaImage,
 };
 use simd_adler32::adler32;
 use std::collections::HashSet;
@@ -40,11 +40,11 @@ impl EncodedPacket {
         encoder_opts: Option<EncoderOptions>,
     ) -> EncodedPacket {
         EncodedPacket {
-            time: time,
-            duration: duration,
+            time,
+            duration,
             checksum: adler32(&data.as_slice()),
             length: data.len() as u64,
-            encoder_opts: encoder_opts,
+            encoder_opts,
             stream_index,
             data,
         }
@@ -114,4 +114,84 @@ impl ProcessorPipeline {
 
         res
     }
+}
+
+pub trait AnsiEncoder {
+    fn color(&self, pixel: &Rgb<u8>, fg: bool) -> String {
+        match self.needs_color() {
+            ColorMode::EightBit => {
+                if fg {
+                    format!(
+                        "\x1B[38;5;{}m",
+                        REVERSE_PALETTE[&(pixel[0], pixel[1], pixel[2])]
+                    )
+                } else {
+                    format!(
+                        "\x1B[48;5;{}m",
+                        REVERSE_PALETTE[&(pixel[0], pixel[1], pixel[2])]
+                    )
+                }
+            }
+            _ => {
+                if fg {
+                    format!(
+                        "\x1B[38;2;{r};{g};{b}m",
+                        r = pixel[0],
+                        g = pixel[1],
+                        b = pixel[2]
+                    )
+                } else {
+                    format!(
+                        "\x1B[48;2;{r};{g};{b}m",
+                        r = pixel[0],
+                        g = pixel[1],
+                        b = pixel[2]
+                    )
+                }
+            }
+        }
+    }
+
+    fn encode_frame(&self, image: &RgbImage) -> String {
+        let mut last_upper: Option<Rgb<u8>> = None;
+        let mut last_lower: Option<Rgb<u8>> = None;
+
+        let mut frame = String::with_capacity((image.width() * image.height()) as usize);
+        for y in (0..image.height() - 1).step_by(2) {
+            for x in 0..image.width() {
+                let upper = image.get_pixel(x, y);
+                let lower = image.get_pixel(x, y + 1);
+
+                if last_upper.is_none() || &last_upper.unwrap() != upper {
+                    frame += &self.color(upper, true);
+                }
+
+                if last_lower.is_none() || &last_lower.unwrap() != lower {
+                    frame += &self.color(lower, false);
+                }
+
+                frame += "▀";
+
+                last_upper = Some(*upper);
+                last_lower = Some(*lower);
+            }
+            frame += "\n";
+        }
+
+        frame
+    }
+
+    fn needs_width(&self) -> u32;
+    fn needs_height(&self) -> u32;
+    fn needs_color(&self) -> ColorMode;
+}
+
+pub trait PacketTransformer {
+    type Source;
+    fn encode_packet(&self, src: &Self::Source) -> Option<EncodedPacket>;
+}
+
+pub trait PacketDecoder {
+    type Output;
+    fn decode_packet(&mut self, src: EncodedPacket) -> Option<Self::Output>;
 }

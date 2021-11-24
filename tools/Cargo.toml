@@ -1,5 +1,5 @@
 [package]
-name = "player"
+name = "anime_telnet_encoder"
 version = "0.1.0"
 edition = "2018"
 
@@ -7,22 +7,21 @@ edition = "2018"
 
 [dependencies]
 lazy_static = "1.4.0"
-image = "0.23.14"
 clap = "2.33.3"
-subparse = "0.7.0"
 tempfile = "3.2.0"
 zstd = "0.9"
 serde_json = "1"
+indicatif = "0.17.0-beta.1"
 fast_image_resize = "0.4.0"
 dialoguer = "0.9"
-anyhow = "1.0.45"
-simd-adler32 = "0.3.4"
-bytes = "1.1.0"
+crossbeam = "0.8.1"
 futures = "0.3"
+bytes = "1.1.0"
 rmp-serde = "0.15.5"
 
-[dependencies.anime_telnet]
-path = "../anime_lib"
+[dependencies.image]
+version = "0.23.14"
+default-features = false
 
 [dependencies.tokio]
 version = "1.13"
@@ -32,19 +31,26 @@ features = ["io-std","net","time","macros","sync","io-util","fs","rt-multi-threa
 version = "0.6.9"
 features = ["codec"]
 
+[dependencies.cyanotype]
+git = "https://github.com/alisww/cyanotype.git"
+
+[dependencies.ac-ffmpeg]
+git = "https://github.com/alisww/rust-ac-ffmpeg.git"
+
+[dependencies.anime_telnet]
+path = "../anime_lib"
+
+[dependencies.substation]
+git = "https://github.com/alisww/substation.git"
+
+[dependencies.subrip]
+git = "https://github.com/alisww/substation.git"
+
 [dependencies.serde]
 version = "1"
 features = ["derive"]
 
-# [[bin]]
-# name = "player"
-# path = "src/play.rs"
-
-# [[bin]]
-# name = "server"
-# path = "src/server.rs"
-
 [[bin]]
-name = "packet_decoder"
-path = "src/bin/packet_decoder.rs"
+name = "encoder"
+path = "src/bin/encoder.rs"
 

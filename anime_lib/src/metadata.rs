@@ -20,8 +20,8 @@ impl ColorMode {
 impl fmt::Display for ColorMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ColorMode::True => write!(f, "full color"), 
-            ColorMode::EightBit => write!(f, "eight-bit")
+            ColorMode::True => write!(f, "full color"),
+            ColorMode::EightBit => write!(f, "eight-bit"),
         }
     }
 }
@@ -35,21 +35,37 @@ pub enum CompressionMode {
 impl fmt::Display for CompressionMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CompressionMode::None => write!(f, "none"), 
-            CompressionMode::Zstd => write!(f, "zstd")
+            CompressionMode::None => write!(f, "none"),
+            CompressionMode::Zstd => write!(f, "zstd"),
         }
     }
 }
 
-use subparse::SubtitleFormat;
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "SubtitleFormat")]
-enum SubtitleFormatDef {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SubtitleFormat {
     SubRip,
     SubStationAlpha,
-    VobSubIdx,
-    VobSubSub,
-    MicroDVD,
+    Unknown(String),
+}
+
+impl SubtitleFormat {
+    pub fn from_codec_name(codec: &str) -> SubtitleFormat {
+        match codec {
+            "srt" => SubtitleFormat::SubRip,
+            "ssa" | "ass" => SubtitleFormat::SubStationAlpha,
+            _ => SubtitleFormat::Unknown(codec.to_owned()),
+        }
+    }
+}
+
+impl fmt::Display for SubtitleFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SubtitleFormat::SubStationAlpha => write!(f, "substation alpha (.ssa)"),
+            SubtitleFormat::SubRip => write!(f, "subrip (.srt)"),
+            SubtitleFormat::Unknown(ref s) => write!(f, "unsupported/unknown ({})", s),
+        }
+    }
 }
 
 #[derive(Builder, Serialize, Deserialize, Debug, Clone)]
@@ -72,8 +88,8 @@ pub struct SubtitleTrack {
     pub name: Option<String>,
     #[builder(default)]
     pub lang: Option<String>,
-    #[serde(with = "SubtitleFormatDef")]
     pub format: SubtitleFormat, // format for the subtitles
+    #[builder(default)]
     pub codec_private: Option<Vec<u8>>,
     pub index: u32,
 }

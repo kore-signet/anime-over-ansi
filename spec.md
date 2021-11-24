@@ -1,4 +1,5 @@
 #  block spec
+(note: all values are big endian)
 ```
 [u64 packet byte length]
 [u8 compression marker [0 = Nothing; 1 = zstd]]
