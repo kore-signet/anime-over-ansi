@@ -1,5 +1,6 @@
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum ColorMode {
@@ -16,10 +17,28 @@ impl ColorMode {
     }
 }
 
+impl fmt::Display for ColorMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ColorMode::True => write!(f, "full color"), 
+            ColorMode::EightBit => write!(f, "eight-bit")
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum CompressionMode {
     None = 0,
     Zstd = 1,
+}
+
+impl fmt::Display for CompressionMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompressionMode::None => write!(f, "none"), 
+            CompressionMode::Zstd => write!(f, "zstd")
+        }
+    }
 }
 
 use subparse::SubtitleFormat;
@@ -42,6 +61,8 @@ pub struct VideoTrack {
     pub height: u32, // height in pixels (divide by two to get line count for terminal)
     pub width: u32,  // width in pixels
     pub encode_time: u64, // unix timestamp of time of encoding start
+    #[builder(default)]
+    pub codec_private: Option<Vec<u8>>,
     pub index: u32,
 }
 
@@ -53,6 +74,7 @@ pub struct SubtitleTrack {
     pub lang: Option<String>,
     #[serde(with = "SubtitleFormatDef")]
     pub format: SubtitleFormat, // format for the subtitles
+    pub codec_private: Option<Vec<u8>>,
     pub index: u32,
 }
 

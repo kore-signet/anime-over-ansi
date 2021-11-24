@@ -1,13 +1,11 @@
 #![allow(unused_assignments)]
 
 use anime_telnet::encoding::EncodedPacket;
-use simd_adler32::adler32;
-use std::pin::Pin;
-use subparse::SubtitleEntry;
+
+
+
 use tokio::{
-    io::{AsyncRead, AsyncReadExt},
-    sync::broadcast,
-    time::{sleep_until, Duration, Instant},
+    time::{Duration},
 };
 
 use bytes::{Buf, BytesMut};
@@ -15,12 +13,14 @@ use tokio_util::codec::Decoder;
 
 pub struct PacketDecoder {
     decompressor: zstd::block::Decompressor,
+    decode_data: bool,
 }
 
 impl PacketDecoder {
-    pub fn new() -> PacketDecoder {
+    pub fn new(decode_data: bool) -> PacketDecoder {
         PacketDecoder {
             decompressor: zstd::block::Decompressor::new(),
+            decode_data,
         }
     }
 }
@@ -63,17 +63,22 @@ impl Decoder for PacketDecoder {
             Some(Duration::from_nanos(duration))
         };
 
-        let mut data = vec![0; length];
-        src.copy_to_slice(&mut data);
+        let data = if self.decode_data {
+            let mut data = vec![0; length];
+            src.copy_to_slice(&mut data);
 
-        let data = if compression == 1 {
-            let mut res = Vec::with_capacity(uncompressed_size as usize);
-            self.decompressor
-                .decompress_to_buffer(&data, &mut res)
-                .unwrap();
-            res
+            if compression == 1 {
+                let mut res = Vec::with_capacity(uncompressed_size as usize);
+                self.decompressor
+                    .decompress_to_buffer(&data, &mut res)
+                    .unwrap();
+                res
+            } else {
+                data
+            }
         } else {
-            data
+            src.advance(length);
+            Vec::new()
         };
 
         Ok(Some(EncodedPacket {

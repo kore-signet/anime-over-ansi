@@ -1,5 +1,3 @@
-#![allow(warnings)]
-
 use anime_telnet::{encoding::*, metadata::*};
 use anime_telnet_encoder::{ANSIVideoEncoder, PacketCodec};
 use clap::Arg;
@@ -7,21 +5,19 @@ use clap::Arg;
 use cyanotype::*;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io::{self, prelude::*, BufWriter};
-use std::path::Path;
-use std::sync::Mutex;
-use std::time::{Duration, SystemTime};
+
+use std::time::{SystemTime};
 use tokio_util::codec::FramedWrite;
 
 use fast_image_resize as fr;
 
-use tempfile::tempfile;
-
-use futures::io::{AsyncWrite, AsyncWriteExt};
-use futures::sink::{Sink, SinkExt};
-use futures::stream::{Stream, StreamExt};
+use futures::sink::{SinkExt};
+use futures::stream::{StreamExt};
 use image::RgbImage;
 use indicatif::{ProgressBar, ProgressStyle};
+use tokio::io::{AsyncWriteExt};
+
+use rmp_serde as rmps;
 
 // gets and removes value from hashmap for whichever one of the keys exists in it
 fn one_of_keys(map: &mut HashMap<String, String>, keys: Vec<&'static str>) -> Option<String> {
@@ -140,8 +136,7 @@ async fn main() -> std::io::Result<()> {
     let input_file = File::open(matches.value_of("INPUT").unwrap()).unwrap();
     let mut demuxer = Demuxer::from_seek(input_file).unwrap();
 
-    let out_fs = File::create(matches.value_of("OUT").unwrap()).unwrap();
-    let mut out_writer = BufWriter::new(out_fs);
+    let _out_fs = File::create(matches.value_of("OUT").unwrap()).unwrap();
 
     let mut track_index: i32 = -1;
 
@@ -195,7 +190,7 @@ async fn main() -> std::io::Result<()> {
                     height: height,
                     color_mode: color_mode,
                     encoder_opts: EncoderOptions {
-                        compression_level: Some(3),
+                        compression_level: Some(compression_level.unwrap_or(3)),
                         compression_mode: compression,
                     },
                 },
@@ -302,6 +297,7 @@ async fn main() -> std::io::Result<()> {
 
         (encoders, video_tracks)
     };
+
     let resize_filter = match matches.value_of("resize").unwrap_or("hamming") {
         "nearest" => fr::FilterType::Box,
         "bilinear" => fr::FilterType::Bilinear,
@@ -311,6 +307,16 @@ async fn main() -> std::io::Result<()> {
         "lanczos" => fr::FilterType::Lanczos3,
         _ => fr::FilterType::Hamming,
     };
+
+    let mut out_file = tokio::fs::File::create(matches.value_of("OUT").unwrap()).await?;
+    let metadata_bytes = rmps::to_vec(&VideoMetadata {
+        video_tracks,
+        subtitle_tracks: vec![],
+    })
+    .unwrap();
+
+    out_file.write_u64(metadata_bytes.len() as u64).await?;
+    out_file.write_all(&metadata_bytes).await?;
 
     let mut processor_pipeline: HashMap<(u32, u32), ProcessorPipeline> = HashMap::new();
 
@@ -327,23 +333,24 @@ async fn main() -> std::io::Result<()> {
             .insert(e.color_mode);
     }
 
-    let mut video_stream = demuxer.subscribe_to_video(0).unwrap();
+    let video_stream = demuxer.subscribe_to_video(0).unwrap();
 
     let demuxer_task = tokio::task::spawn(async move {
         demuxer.run().await.unwrap();
     });
 
-    let mut pipelines: Vec<ProcessorPipeline> =
-        processor_pipeline.into_iter().map(|(k, v)| v).collect();
+    let pipelines: Vec<ProcessorPipeline> =
+        processor_pipeline.into_iter().map(|(_,v)| v).collect();
 
     let encoder_bar = ProgressBar::new_spinner();
     encoder_bar.set_style(
         ProgressStyle::default_spinner()
             .template("{spinner} {per_sec:5!}fps - encoding frame {pos}"),
     );
+
     encoder_bar.enable_steady_tick(200);
 
-    let mut resized_stream = video_stream
+    let resized_stream = video_stream
         .enumerate()
         .map(|(i, img)| {
             let time = img.time;
@@ -368,13 +375,14 @@ async fn main() -> std::io::Result<()> {
             }))
         });
 
-    let out_stream = FramedWrite::new(
-        tokio::fs::File::create("out.ansi").await.unwrap(),
-        PacketCodec::new(),
-    )
-    .buffer(256);
+    let out_stream = FramedWrite::new(out_file, PacketCodec::new()).buffer(256);
 
-    resized_stream.forward(out_stream).await;
+    resized_stream.forward(out_stream).await?;
+
+    demuxer_task.await?;
+
+    encoder_bar.finish_at_current_pos();
+
     // .split();
     // .for_each(|_| futures::future::ready(()))
     // .await;
@@ -389,7 +397,7 @@ async fn main() -> std::io::Result<()> {
     //         .map(|encoder| encoder.encode_frame(&packet))
     // });
 
-    let mut idx = 0;
+    let _idx = 0;
 
     // let subtitle_tracks: Vec<(File, SubtitleTrack)> =
     //     if let Some(vals) = matches.values_of("subtitle_track") {
@@ -479,9 +487,6 @@ async fn main() -> std::io::Result<()> {
 
     // }
 
-    demuxer_task.await;
-
-    encoder_bar.finish_at_current_pos();
     // println!("finished encoding; writing finished file..");
 
     // let mut track_position = 0;

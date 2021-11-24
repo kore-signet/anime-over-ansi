@@ -6,7 +6,7 @@ use anime_telnet::{
 };
 use bytes::{BufMut, BytesMut};
 use image::{Rgb, RgbImage};
-use std::sync::Mutex;
+
 use tokio_util::codec::Encoder;
 
 pub struct PacketCodec {

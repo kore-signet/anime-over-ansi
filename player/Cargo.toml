@@ -19,6 +19,7 @@ anyhow = "1.0.45"
 simd-adler32 = "0.3.4"
 bytes = "1.1.0"
 futures = "0.3"
+rmp-serde = "0.15.5"
 
 [dependencies.anime_telnet]
 path = "../anime_lib"
