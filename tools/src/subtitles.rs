@@ -8,6 +8,29 @@ use std::pin::Pin;
 use tokio::fs;
 use tokio::io::{self, AsyncReadExt};
 
+#[derive(Default)]
+pub struct SSAFilter {
+    pub layers: Vec<isize>,
+    pub styles: Vec<String>,
+}
+
+impl SSAFilter {
+    pub fn check(&self, entry: &substation::Entry) -> bool {
+        (self.layers.is_empty()
+            || entry
+                .layer
+                .as_ref()
+                .map(|v| self.layers.contains(v))
+                .unwrap_or(false))
+            && (self.styles.is_empty()
+                || entry
+                    .style
+                    .as_ref()
+                    .map(|v| self.styles.contains(v))
+                    .unwrap_or(false))
+    }
+}
+
 pub struct SSAEncoder {
     definitions: Vec<String>,
     stream_index: u32,
@@ -63,11 +86,15 @@ impl PacketTransformer for SSAEncoder {
 
 pub struct SSADecoder {
     definition_header: Vec<String>,
+    filter: SSAFilter,
 }
 
 impl SSADecoder {
-    pub fn new(definition_header: Vec<String>) -> SSADecoder {
-        SSADecoder { definition_header }
+    pub fn new(definition_header: Vec<String>, filter: Option<SSAFilter>) -> SSADecoder {
+        SSADecoder {
+            definition_header,
+            filter: filter.unwrap_or_default(),
+        }
     }
 }
 
@@ -83,10 +110,15 @@ impl PacketDecoder for SSADecoder {
             &self.definition_header,
         )
         .ok()
-        .map(|(_, mut entry)| {
+        .and_then(|(_, mut entry)| {
             entry.start = Some(time);
             entry.end = Some(end);
-            SubtitlePacket::SSAEntry(entry)
+
+            if self.filter.check(&entry) {
+                Some(SubtitlePacket::SSAEntry(entry))
+            } else {
+                None
+            }
         })
     }
 }
