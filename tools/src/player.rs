@@ -44,12 +44,12 @@ pub async fn play(
                 // show subtitle if available
                 if let Some(SubtitlePacket::SRTEntry(e)) = subtitle_buffer.front() {
                     if e.start <= video_frame.time {
-                        output.broadcast(b"\x1B[0J ".to_vec()).await?;
+                        output.broadcast(b"\x1B[2K ".to_vec()).await?;
                         output.broadcast(e.text.clone().into_bytes()).await?;
                     }
                 } else if let Some(SubtitlePacket::SSAEntry(e)) = subtitle_buffer.front() {
                     if e.start.unwrap() <= video_frame.time {
-                        output.broadcast(b"\x1B[0J ".to_vec()).await?;
+                        output.broadcast(b"\x1B[2K ".to_vec()).await?;
                         let s = substation::parser::text_line(&e.text).unwrap().1.into_iter().filter_map(|v| {
                             if let substation::TextSection::Text(s) = v {
                                 Some(s)
@@ -60,7 +60,7 @@ pub async fn play(
                         output.broadcast(s).await?;
                     }
                 } else {
-                    output.broadcast(b"\x1B[0J ".to_vec()).await?;
+                    output.broadcast(b"\x1B[2K ".to_vec()).await?;
                 }
             },
             Some(subtitle_chunk) = subtitle_stream.next() => {
