@@ -27,7 +27,6 @@ dependencies = [
  "serde",
  "simd-adler32",
  "thiserror",
- "zstd",
 ]
 
 [[package]]
@@ -39,7 +38,6 @@ dependencies = [
  "async-broadcast",
  "bytes",
  "clap",
- "crossbeam",
  "cyanotype",
  "dialoguer",
  "fast_image_resize",
@@ -49,7 +47,6 @@ dependencies = [
  "lazy_static",
  "rmp-serde",
  "serde",
- "serde_json",
  "subrip",
  "substation",
  "tempfile",
@@ -250,20 +247,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crossbeam"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ae5588f6b3c3cb05239e90bd110f257254aecd01e4635400391aeae07497845"
-dependencies = [
- "cfg-if",
- "crossbeam-channel",
- "crossbeam-deque",
- "crossbeam-epoch",
- "crossbeam-queue",
- "crossbeam-utils",
-]
-
-[[package]]
 name = "crossbeam-channel"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -295,16 +278,6 @@ dependencies = [
  "lazy_static",
  "memoffset",
  "scopeguard",
-]
-
-[[package]]
-name = "crossbeam-queue"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b10ddc024425c88c2ad148c1b0fd53f4c6d38db9697c9f1588381212fa657c9"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -342,7 +315,7 @@ dependencies = [
 [[package]]
 name = "cyanotype"
 version = "0.1.0"
-source = "git+https://github.com/alisww/cyanotype.git#9be6fcd71e71929da7a4ef40c9ca7b5723a6c9fe"
+source = "git+https://github.com/alisww/cyanotype.git#da01a5a17066c8ad6d27a5866223440dff5aa230"
 dependencies = [
  "ac-ffmpeg",
  "async-broadcast",
@@ -1082,9 +1055,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.71"
+version = "1.0.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "063bf466a64011ac24040a49009724ee60a57da1b437617ceb32e53ad61bfb19"
+checksum = "d0ffa0837f2dfa6fb90868c2b5468cad482e175f7dad97e7421951e663f2b527"
 dependencies = [
  "itoa",
  "ryu",
@@ -1135,9 +1108,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.81"
+version = "1.0.82"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2afee18b8beb5a596ecb4a2dce128c719b4ba399d34126b9e4396e3f9860966"
+checksum = "8daf5dd0bb60cbd4137b1b587d2fc0ae729bc07cf01cd70b36a1ed5ade3b9d59"
 dependencies = [
  "proc-macro2",
  "quote",
