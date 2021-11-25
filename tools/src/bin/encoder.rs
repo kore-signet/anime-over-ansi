@@ -464,7 +464,9 @@ async fn main() -> std::io::Result<()> {
             .insert(e.underlying.color_mode);
     }
 
-    let video_stream = demuxer.subscribe_to_video(0).unwrap();
+    let video_stream = demuxer
+        .subscribe_to_video(*demuxer.video_streams.keys().next().unwrap())
+        .unwrap();
 
     let demuxer_task = tokio::task::spawn(async move {
         demuxer.run().await.unwrap();

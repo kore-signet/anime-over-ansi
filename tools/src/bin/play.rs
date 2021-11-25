@@ -180,11 +180,10 @@ async fn main() -> std::io::Result<()> {
                         Ok(msg) = orx.recv() => {
                             if !to_rm.is_empty() {
                                 println!("disconnecting {} broken socket(s)", to_rm.len());
-                                println!("total connections: {}", sockets.len());
                             }
 
                             for i in to_rm.drain(..) {
-                                sockets.remove(i);
+                                sockets.remove(i).shutdown().await;
                             }
 
                             for (i,socket) in sockets.iter_mut().enumerate() {

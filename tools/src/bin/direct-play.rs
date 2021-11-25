@@ -12,7 +12,8 @@ use futures::stream::{self, Stream, StreamExt};
 
 use std::pin::Pin;
 use tokio::io::{self, AsyncWriteExt};
-use tokio::task;
+use tokio::net::TcpListener;
+use tokio::task::{self, JoinHandle};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -39,6 +40,12 @@ async fn main() -> std::io::Result<()> {
                     "lanczos",
                     "bilinear",
                 ]),
+        )
+        .arg(
+            Arg::with_name("bind")
+                .long("--bind")
+                .takes_value(true)
+                .help("bind a TCP server to specified address instead of outputting to stdout"),
         )
         .arg(
             Arg::with_name("filter_ssa_layers")
@@ -204,25 +211,63 @@ async fn main() -> std::io::Result<()> {
     let (mut otx, mut orx) = async_broadcast::broadcast::<Vec<u8>>(64);
     otx.set_overflow(true);
 
-    let out_task = task::spawn(async move {
-        print!("\x1B[2J\x1B[1;1H");
+    let output_task: JoinHandle<io::Result<()>> =
+        if let Some(addr) = matches.value_of("bind").map(|v| v.to_owned()) {
+            task::spawn(async move {
+                let listener = TcpListener::bind(addr).await?;
+                let mut sockets = Vec::new();
+                let mut to_rm = Vec::new();
 
-        let mut stdout = io::stdout();
-        while let Some(val) = orx.next().await {
-            stdout.write_all(&val).await?;
-        }
+                loop {
+                    tokio::select! {
+                        Ok((mut socket,addr)) = listener.accept() => {
+                            if socket.write_all(b"\x1B[2J\x1B[1;1H").await.is_ok() {
+                                sockets.push(socket);
+                                println!("got new connection from {}", addr);
+                                println!("total connections: {}", sockets.len());
+                            };
+                        },
+                        Ok(msg) = orx.recv() => {
+                            if !to_rm.is_empty() {
+                                println!("disconnecting {} broken socket(s)", to_rm.len());
+                            }
 
-        io::Result::Ok(())
-    });
+                            for i in to_rm.drain(..) {
+                                sockets.remove(i).shutdown().await;
+                            }
+
+                            for (i,socket) in sockets.iter_mut().enumerate() {
+                                if socket.write_all(&msg).await.is_err() {
+                                    to_rm.push(i);
+                                };
+                            }
+                        },
+                        else => break
+                    }
+                }
+
+                Ok(())
+            })
+        } else {
+            task::spawn(async move {
+                print!("\x1B[2J\x1B[1;1H");
+
+                let mut stdout = io::stdout();
+                while let Some(val) = orx.next().await {
+                    stdout.write_all(&val).await?;
+                }
+
+                Ok(())
+            })
+        };
 
     let runner = task::spawn(player::play(resized_stream.boxed(), subtitle_stream, otx));
 
     tokio::try_join! {
         demuxer_task,
         runner,
-        out_task
+        output_task
     };
-
 
     Ok(())
 }
