@@ -96,7 +96,10 @@ async fn main() -> std::io::Result<()> {
     let video_track = metadata.video_tracks.remove(video_selection);
     let video_track_index = video_track.index;
 
-    let subtitle_selection = Select::with_theme(&ColorfulTheme::default())
+    let subtitle_track = if metadata.subtitle_tracks.is_empty() {
+        None 
+    } else {
+        let subtitle_selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("choose subtitle track")
         .items(
             &metadata
@@ -115,11 +118,13 @@ async fn main() -> std::io::Result<()> {
         .interact()
         .unwrap();
 
-    let subtitle_track = if subtitle_selection < metadata.subtitle_tracks.len() {
-        Some(metadata.subtitle_tracks.remove(subtitle_selection))
-    } else {
-        None
+        if subtitle_selection < metadata.subtitle_tracks.len() {
+            Some(metadata.subtitle_tracks.remove(subtitle_selection))
+        } else {
+            None
+        }
     };
+
 
     let has_subtitle_track = subtitle_track.is_some();
     let subtitle_track_index = subtitle_track.as_ref().map(|v| v.index).unwrap_or(0);

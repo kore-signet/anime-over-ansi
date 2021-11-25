@@ -8,7 +8,7 @@ use cyanotype::*;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 
-use indicatif::MultiProgress;
+use indicatif::{MultiProgress, ProgressDrawTarget};
 use std::time::SystemTime;
 use tokio_util::codec::FramedWrite;
 
@@ -143,6 +143,7 @@ async fn main() -> std::io::Result<()> {
     let mut track_index: i32 = -1;
 
     let progress_bars = MultiProgress::new();
+    progress_bars.set_draw_target(ProgressDrawTarget::hidden());
 
     let (encoders, video_tracks) = if let Some(vals) = matches.values_of("track") {
         vals.map(|cfg| {
@@ -225,11 +226,16 @@ async fn main() -> std::io::Result<()> {
         let theme = dialoguer::theme::ColorfulTheme::default();
 
         loop {
-            let add_track = dialoguer::Select::with_theme(&theme)
-                .with_prompt("add a video track?")
-                .items(&["yes!", "finish video track configuration"])
-                .interact()
-                .unwrap();
+            let add_track = if video_tracks.is_empty() {
+                0
+            } else {
+                dialoguer::Select::with_theme(&theme)
+                    .with_prompt("add another video track?")
+                    .items(&["yes!", "finish video track configuration"])
+                    .interact()
+                    .unwrap()
+            };
+
             if add_track == 1 {
                 break;
             } else {
@@ -438,6 +444,8 @@ async fn main() -> std::io::Result<()> {
         "lanczos" => fr::FilterType::Lanczos3,
         _ => fr::FilterType::Hamming,
     };
+
+    progress_bars.set_draw_target(ProgressDrawTarget::stderr());
 
     let mut out_file = tokio::fs::File::create(matches.value_of("OUT").unwrap()).await?;
     let metadata_bytes = rmps::to_vec(&VideoMetadata {
