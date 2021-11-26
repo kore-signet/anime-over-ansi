@@ -3,7 +3,9 @@ use anime_telnet::encoding::*;
 use anime_telnet::metadata::CompressionMode;
 use bytes::{Buf, BufMut, BytesMut};
 
+use simd_adler32::adler32;
 use std::time::Duration;
+use tokio::io;
 use tokio_util::codec::{Decoder, Encoder};
 
 pub struct PacketWriteCodec {
@@ -29,6 +31,7 @@ impl Encoder<EncodedPacket> for PacketWriteCodec {
                     self.compressor
                         .compress(&v.data, opts.compression_level.unwrap())
                         .unwrap(),
+                    false, // don't refresh checksum
                 );
             }
         }
@@ -118,10 +121,17 @@ impl Decoder for PacketReadCodec {
                 self.decompressor
                     .decompress_to_buffer(&data, &mut res)
                     .unwrap();
-                res
-            } else {
-                data
+                data = res;
             }
+
+            if adler32(&data.as_slice()) != checksum {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "invalid checksum for block",
+                ));
+            }
+
+            data
         } else {
             src.advance(length);
             Vec::new()

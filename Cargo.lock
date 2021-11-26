@@ -47,6 +47,7 @@ dependencies = [
  "lazy_static",
  "rmp-serde",
  "serde",
+ "simd-adler32",
  "subrip",
  "substation",
  "tempfile",

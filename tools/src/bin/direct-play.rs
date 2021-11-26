@@ -11,16 +11,16 @@ use fast_image_resize as fr;
 use futures::stream::{self, Stream, StreamExt};
 
 use std::pin::Pin;
-use tokio::io::{self, AsyncWriteExt};
+use tokio::io::{self, AsyncWriteExt, BufWriter};
 use tokio::net::TcpListener;
 use tokio::task::{self, JoinHandle};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let matches = clap::App::new("ansi.moe encoder")
+    let matches = clap::App::new("ansi.moe direct player")
         .version("1.0")
         .author("allie signet <allie@cat-girl.gay>")
-        .about("encodes video into ANSI escape sequences")
+        .about("encodes and directly plays normal video")
         .arg(
             Arg::with_name("INPUT")
                 .help("file to read from")
@@ -222,7 +222,7 @@ async fn main() -> std::io::Result<()> {
                     tokio::select! {
                         Ok((mut socket,addr)) = listener.accept() => {
                             if socket.write_all(b"\x1B[2J\x1B[1;1H").await.is_ok() {
-                                sockets.push(socket);
+                                sockets.push(BufWriter::new(socket));
                                 println!("got new connection from {}", addr);
                                 println!("total connections: {}", sockets.len());
                             };
@@ -233,7 +233,7 @@ async fn main() -> std::io::Result<()> {
                             }
 
                             for i in to_rm.drain(..) {
-                                sockets.remove(i).shutdown().await;
+                                sockets.remove(i).into_inner().shutdown().await;
                             }
 
                             for (i,socket) in sockets.iter_mut().enumerate() {

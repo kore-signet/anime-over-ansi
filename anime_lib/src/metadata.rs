@@ -20,7 +20,7 @@ impl ColorMode {
 impl fmt::Display for ColorMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ColorMode::True => write!(f, "full color"),
+            ColorMode::True => write!(f, "true"),
             ColorMode::EightBit => write!(f, "eight-bit"),
         }
     }

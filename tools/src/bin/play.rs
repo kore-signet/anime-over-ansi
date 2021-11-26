@@ -13,17 +13,17 @@ use dialoguer::{theme::ColorfulTheme, Select};
 use futures::channel::mpsc;
 use futures::{SinkExt, StreamExt};
 use rmp_serde as rmps;
-use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpListener;
 use tokio::task::{self, JoinHandle};
 use tokio_util::codec::FramedRead;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let matches = clap::App::new("ansi.moe inspector")
+    let matches = clap::App::new("ansi.moe player")
         .version("1.0")
         .author("allie signet <allie@cat-girl.gay>")
-        .about("inspects .ansi video container")
+        .about("plays video from .ansi video container")
         .arg(
             Arg::with_name("INPUT")
                 .help("file to read from")
@@ -80,7 +80,7 @@ async fn main() -> std::io::Result<()> {
                 .iter()
                 .map(|v| {
                     format!(
-                        "{} ({}x{}, color {}, compression: {})",
+                        "{} ({}x{}, color mode {}, compression: {})",
                         v.name.as_ref().unwrap_or(&"<undefined>".to_owned()),
                         v.width,
                         v.height,
@@ -97,26 +97,26 @@ async fn main() -> std::io::Result<()> {
     let video_track_index = video_track.index;
 
     let subtitle_track = if metadata.subtitle_tracks.is_empty() {
-        None 
+        None
     } else {
         let subtitle_selection = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("choose subtitle track")
-        .items(
-            &metadata
-                .subtitle_tracks
-                .iter()
-                .map(|v| {
-                    format!(
-                        "{} ({})",
-                        v.name.as_deref().unwrap_or("<undefined>"),
-                        v.format
-                    )
-                })
-                .chain(vec!["none".to_owned()].into_iter())
-                .collect::<Vec<String>>(),
-        )
-        .interact()
-        .unwrap();
+            .with_prompt("choose subtitle track")
+            .items(
+                &metadata
+                    .subtitle_tracks
+                    .iter()
+                    .map(|v| {
+                        format!(
+                            "{} ({})",
+                            v.name.as_deref().unwrap_or("<undefined>"),
+                            v.format
+                        )
+                    })
+                    .chain(vec!["none".to_owned()].into_iter())
+                    .collect::<Vec<String>>(),
+            )
+            .interact()
+            .unwrap();
 
         if subtitle_selection < metadata.subtitle_tracks.len() {
             Some(metadata.subtitle_tracks.remove(subtitle_selection))
@@ -124,7 +124,6 @@ async fn main() -> std::io::Result<()> {
             None
         }
     };
-
 
     let has_subtitle_track = subtitle_track.is_some();
     let subtitle_track_index = subtitle_track.as_ref().map(|v| v.index).unwrap_or(0);
@@ -177,7 +176,7 @@ async fn main() -> std::io::Result<()> {
                     tokio::select! {
                         Ok((mut socket,addr)) = listener.accept() => {
                             if socket.write_all(b"\x1B[2J\x1B[1;1H").await.is_ok() {
-                                sockets.push(socket);
+                                sockets.push(BufWriter::new(socket));
                                 println!("got new connection from {}", addr);
                                 println!("total connections: {}", sockets.len());
                             };
@@ -188,7 +187,7 @@ async fn main() -> std::io::Result<()> {
                             }
 
                             for i in to_rm.drain(..) {
-                                sockets.remove(i).shutdown().await;
+                                sockets.remove(i).into_inner().shutdown().await;
                             }
 
                             for (i,socket) in sockets.iter_mut().enumerate() {

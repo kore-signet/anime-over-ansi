@@ -50,20 +50,11 @@ impl EncodedPacket {
         }
     }
 
-    pub fn map_data(self, data: Vec<u8>) -> EncodedPacket {
-        EncodedPacket {
-            time: self.time,
-            duration: self.duration,
-            checksum: adler32(&data.as_slice()),
-            length: data.len() as u64,
-            encoder_opts: self.encoder_opts,
-            stream_index: self.stream_index,
-            data,
+    pub fn switch_data(&mut self, data: Vec<u8>, refresh_checksum: bool) {
+        if refresh_checksum {
+            self.checksum = adler32(&data.as_slice());
         }
-    }
 
-    pub fn switch_data(&mut self, data: Vec<u8>) {
-        self.checksum = adler32(&data.as_slice());
         self.length = data.len() as u64;
         self.data = data;
     }
