@@ -1,100 +1,267 @@
 <html>
-  <head>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fira+Sans+Condensed:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700;1,800;1,900&family=Montserrat:wght@500&family=Noto+Serif&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      html {
-        background-color: black;
-        color: white;
-      }
 
-      .main-title {
-        font-family: "Fira Sans Condensed", sans-serif;
-        font-size: 4rem;
-        margin-bottom: 0;
-      }
+<head>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fira+Sans+Condensed:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700;1,800;1,900&family=Montserrat:wght@500&family=Noto+Serif&display=swap"
+    rel="stylesheet" />
+  <style>
+    html {
+      background-color: rgb(29, 29, 29);
+      color: white;
+    }
 
-      .subtitle {
-        font-family: "Fira Sans Condensed", sans-serif;
-        font-style: italic;
-        font-weight: 100;
-        margin-top: 0;
-      }
+    table {
+      max-width: 50%;
+      table-layout: fixed;
+      border-collapse: collapse;
+    }
 
-      .heading {
-        font-family: "Montserrat", sans-serif;
-        margin-bottom: 0;
-      }
+    tbody {
+      white-space: pre-wrap;
+    }
 
-      .main-title > span {
-        color: #ec8e8e;
-      }
+    th, td {
+      padding: 0.4rem;
+      border-left: 0;
+      border: 4px solid rgb(255, 255, 255);
+    }
 
-      .flex-col {
-        display: flex;
-        flex-direction: column;
-        flex-basis: 100%;
-        justify-content: center;
-        align-items: center;
-      }
+    tr > td:nth-child(1) {
+      font-style: italic;
+    }
 
-      p {
-        font-family: "Noto Serif", "serif";
-        font-size: 1rem;
-      }
+    .packet-field {
+      background-color: #af5252;
+    }
 
-     ul {
-         list-style-type: '>   '
-     }
+    .packet-field-type {
+      background-color: rgb(36, 36, 36);
+    }
 
-      li {
-        font-family: "Noto Serif", "serif";
-      }
-    </style>
-  </head>
-  <body>
-    <h1 class="main-title">ansi<span>.</span>moe specification</h1>
-    <h2 class="heading">1. metadata </h2>
-    <p>
-        every file starts with an unsigned 8 bit integer in big-endian format, describing the length of the JSON metadata for the file. 
-        the metadata which follows is composed of a JSON object, containing two top level keys: 'video_tracks' and 'subtitle_tracks'
-    </p>
-    <h3 class="heading">1.1 video tracks</h3>
-    <p>
-        video tracks are described by json objects with the following keys.
-        <ul>
-            <li>'name' (optional) - name for the track</li>
-            <li>'framerate' - framerate video should be played at</li>
-            <li>'color_mode' - color mode used for encoding the track, either 'True' or 'EightBit'</li>
-            <li>'compression' - compression used on this track. may be 'None' or 'Zstd'</li>
-            <li>'width' - width of the video track</li>
-            <li>'height' - height of the video track</li>
-            <li>'encode_time' - time track was encoded, in seconds since the unix epoch </li>
-            <li>'frame_lengths' - length of every frame, in order, in bytes. used for reading each frame</li>
-            <li>'frame_hashes' - Adler32 hash of every frame's data (as uncompressed UTF8 bytes), in order.</li>
-            <li>'frame_times' - time every frame should be displayed at, measured in nanoseconds since the start of the video</li>
-            <li>'offset' - offset track data starts at (does not account for the size of the metadata)</li>
-            <li>'length' - length in bytes of the track data</li>
-        </ul>
-    </p>
-    <h4 class="heading">1.1.1 video frames</h4>
-    <p>
-        video frames are encoded utf8 strings containing a series of half-block unicode characters, where the upper half is colored using a foreground-setting ANSI escape code and the lower half is colored using a background-setting one, displaying two 'pixels' with one character.
-    </p>
-    <h3 class="heading">1.2 subtitle tracks</h3>
-    <p>
-        subtitle tracks are described by json objects with the following keys.
-        <ul>
-            <li>'name' (optional) - name for the track</li>
-            <li>'lang' (optional) - language of the track</li>
-            <li>'format' - format of the subtitle track. may be 'SubRip', 'SubStationAlpha', or 'MicroDVD'.</li>
-            <li>'offset' - offset track data starts at (does not account for the size of the metadata)</li>
-            <li>'length' - length in bytes of the track data</li>
-        </ul>
-    </p>
-  </body>
+    .main-title {
+      font-family: "Fira Sans Condensed", sans-serif;
+      font-size: 4rem;
+      margin-bottom: 0;
+    }
+
+    .subtitle {
+      font-family: "Fira Sans Condensed", sans-serif;
+      font-style: italic;
+      font-weight: 100;
+      margin-top: 0;
+    }
+
+    .heading {
+      font-family: "Montserrat", sans-serif;
+      margin-bottom: 0;
+    }
+
+    .main-title>span {
+      color: #ec8e8e;
+    }
+
+    .flex-col {
+      display: flex;
+      flex-direction: column;
+      flex-basis: 100%;
+      justify-content: center;
+      align-items: center;
+    }
+
+    p {
+      font-family: "Montserrat", "sans-serif";
+      font-size: 1rem;
+    }
+
+    ul {
+      list-style-type: '>   '
+    }
+
+    li {
+      font-family: "Montserrat", "sans-serif";
+    }
+
+    a {
+      color: #c9ffca;
+    }
+  </style>
+
+</head>
+
+<body>
+  <h1 class="main-title">ansi<span>.</span>moe container specification</h1>
+  <h2 class="heading">1. metadata </h2>
+  <p>
+    every file starts with an unsigned 8 bit integer in big-endian format, describing the length of the JSON metadata
+    for the file.
+    the metadata which follows is composed of a messagepack object, containing two top level keys: <i>video_tracks</i>
+    and <i>subtitle_tracks</i>.
+  </p>
+  <h3 class="heading">1.1 video tracks</h3>
+  <p>
+    video tracks are described by objects with the following keys.
+    <br />
+    <br />
+    <table>
+      <colgroup>
+        <col class="packet-field">
+        <col class="packet-field-type">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>key</th>
+          <th>description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>name (optional)</td>
+          <td>name for the track</td>
+        </tr>
+        <tr>
+          <td>color_mode</td>
+          <td>color mode used for encoding the track, either 'True' or 'EightBit'</td>
+        </tr>
+        <tr>
+          <td>compression</td>
+          <td>compression used on this track. may be 'None' or 'Zstd'</td>
+        </tr>
+        <tr>
+          <td>width</td>
+          <td>width of the video track</td>
+        </tr>
+        <tr>
+          <td>height</td>
+          <td>width of the video track</td>
+        </tr>
+        <tr>
+          <td>codec_private (optional)</td>
+          <td>codec specific data, as raw bytes. currently unused</td>
+        </tr>
+        <tr>
+          <td>encode_time</td>
+          <td>time track was encoded, in seconds since the unix epoch</td>
+        </tr>
+        <tr>
+          <td>index</td>
+          <td>the stream index, which is encoded into every packet. does not necessarily correspond to the track's index in subtitle_tracks.</td>
+        </tr>
+      </tbody>
+    </table>
+  </p>
+  <h3 class="heading">1.2 subtitle tracks</h3>
+  <p>
+    subtitle tracks are described by objects with the following keys.
+    <br />
+    <br />
+    <table>
+      <colgroup>
+        <col class="packet-field">
+        <col class="packet-field-type">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>key</th>
+          <th>description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>name (optional)</td>
+          <td>name for the track</td>
+        </tr>
+        <tr>
+          <td>encode_time</td>
+          <td>time track was encoded, in seconds since the unix epoch</td>
+        </tr>
+        <tr>
+          <td>format</td>
+          <td>format of the subtitle track. may be 'SubRip', 'SubStationAlpha', or 'Unknown'.</td>
+        </tr>
+        <tr>
+          <td>codec_private (optional)</td>
+          <td>codec specific data, as raw bytes. if format is 'SubStationAlpha', this will contain the style and info headers.</td>
+        </tr>
+        <tr>
+          <td>index</td>
+          <td>the stream index, which is encoded into every packet. does not necessarily correspond to the track's index in subtitle_tracks.</td>
+        <tr>
+          <td>presentation timestamp (ns)</td>
+          <td>64bit unsigned int</td>
+        </tr>
+        <tr>
+          <td>duration (ns)</td>
+          <td>64bit unsigned int</td>
+        </tr>
+      </tbody>
+    </table>
+  </p>
+  <h2 class="heading">2. the packet format</h2>
+  <p>
+    the contents of the file are composed of <i>packets</i> of data, which contain the data of e.g a video frame. they are written in order to the container file. they are encoded as follows:
+    <br />
+    <br />
+    <table>
+      <colgroup>
+        <col class="packet-field">
+        <col class="packet-field-type">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>field</th>
+          <th>data type</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>packet length</td>
+          <td>64bit unsigned int</td>
+        </tr>
+        <tr>
+          <td>compression marker</td>
+          <td>8bit unsigned int</td>
+        </tr>
+        <tr>
+          <td>uncompressed size (only if data is compressed)</td>
+          <td>64bit unsigned int</td>
+        </tr>
+        <tr>
+          <td>stream index</td>
+          <td>32bit unsigned int</td>
+        </tr>
+        <tr>
+          <td>adler32 checksum</td>
+          <td>32bit unsigned int</td>
+        <tr>
+          <td>presentation timestamp (ns)</td>
+          <td>64bit unsigned int</td>
+        </tr>
+        <tr>
+          <td>duration (ns)</td>
+          <td>64bit unsigned int</td>
+        </tr>
+      </tbody>
+    </table>
+  </p>
+  <h3 class="heading">2.1 video packets</h3>
+  <p>
+    the duration of the packet is undefined; the presentation timestamp defines when the frame should be displayed to the user relative to the start of the video. <br/><br/>
+    video frames are encoded utf8 strings containing a series of half-block unicode characters, where the upper half is
+    colored using a foreground-setting ANSI escape code and the lower half is colored using a background-setting one,
+    displaying two 'pixels' with one character.
+  </p>
+  <h3 class="heading">2.2 subtitle packets</h3>
+  <h4 class="heading">2.2.1 SRT packets</h4>
+  <p>
+    if the packet belongs to a SubRip subtitle track, the data will be the utf-8 encoded text of the subtitle.
+    the start of the subtitle is used to set the presentation timestamp, and the end of the subtitle is used to set the subtitle duration.
+  </p>
+  <h4 class="heading">2.2.2 SSA/ASS packets</h4>
+  <p>
+    if the packet belongs to a SubStationAlpha subtitle track, the data will be a utf-8 encoded SSA entry, stored as in the <a href="https://www.matroska.org/technical/subtitles.html#ssaass-subtitles">Matroska container</a>: in the format 'ReadOrder, Layer, Style, Name, MarginL, MarginR, MarginV, Effect, Text'.<br/><br/>
+    the start of the subtitle is used to set the presentation timestamp, and the end of the subtitle is used to set the subtitle duration.
+  </p>
+</body>
 </html>
