@@ -10,6 +10,7 @@ use image::RgbImage;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::pin::Pin;
 
+/// An ANSI video encoder with a progress bar.
 pub struct SpinnyANSIVideoEncoder {
     pub underlying: ANSIVideoEncoder,
     bar: ProgressBar,

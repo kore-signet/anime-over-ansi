@@ -8,6 +8,7 @@ use std::pin::Pin;
 use tokio::fs;
 use tokio::io::{self, AsyncReadExt};
 
+/// Filters for SSA subtitles.
 #[derive(Default)]
 pub struct SSAFilter {
     pub layers: Vec<isize>,
@@ -31,6 +32,7 @@ impl SSAFilter {
     }
 }
 
+/// An encoder that transforms SSA subtitle entries into packets.
 pub struct SSAEncoder {
     definitions: Vec<String>,
     stream_index: u32,
@@ -84,6 +86,7 @@ impl PacketTransformer for SSAEncoder {
     }
 }
 
+/// A decoder that transforms packets into SSA subtitles.
 pub struct SSADecoder {
     definition_header: Vec<String>,
     filter: SSAFilter,
@@ -123,6 +126,7 @@ impl PacketDecoder for SSADecoder {
     }
 }
 
+/// An encoder that transforms subrip subtitles into packets.
 pub struct SRTEncoder {
     stream_index: u32,
 }
@@ -151,6 +155,7 @@ impl PacketTransformer for SRTEncoder {
     }
 }
 
+/// A decoder that transforms packets into subrip subtitles.
 pub struct SRTDecoder {
     idx: u32,
 }
@@ -180,6 +185,7 @@ impl PacketDecoder for SRTDecoder {
     }
 }
 
+/// A subtitle encoder that simply passes data through.
 pub struct PassthroughSubtitleEncoder {
     stream_index: u32,
 }
@@ -208,6 +214,7 @@ impl PacketTransformer for PassthroughSubtitleEncoder {
     }
 }
 
+/// Converts an SSA file into a subtitle track and packets.
 pub async fn ssa_file_to_packets(
     mut f: fs::File,
     mut subtitle_track: SubtitleTrack,
@@ -277,6 +284,7 @@ pub async fn ssa_file_to_packets(
     ))
 }
 
+/// Converts a subrip file into packets.
 pub async fn srt_file_to_packets(
     mut f: fs::File,
     stream_index: u32,

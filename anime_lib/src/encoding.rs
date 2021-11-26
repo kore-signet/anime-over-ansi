@@ -14,24 +14,34 @@ use std::collections::HashSet;
 use std::num::NonZeroU32;
 use std::time::Duration;
 
+/// Options for the encoder writing this packet into a sink / file.
 #[derive(Copy, Clone, Debug)]
 pub struct EncoderOptions {
     pub compression_mode: CompressionMode,
     pub compression_level: Option<i32>,
 }
 
+/// The base-level data unit, representing a single frame of video or subtitle data.
 #[derive(Debug, Clone)]
 pub struct EncodedPacket {
+    /// Index of the stream this packet belongs to.
     pub stream_index: u32,
+    /// Adler32 checksum of this packet's data
     pub checksum: u32,
+    /// Length of this packet's data in bytes
     pub length: u64,
+    /// Presentation time of packet
     pub time: Duration,
+    /// Duration of packet, if available
     pub duration: Option<Duration>,
+    /// Packet data
     pub data: Vec<u8>,
+    /// Options for the encoder writing this packet into a sink / file.
     pub encoder_opts: Option<EncoderOptions>,
 }
 
 impl EncodedPacket {
+    /// Create a packet from data, adding in a calculated checksum.
     pub fn from_data(
         stream_index: u32,
         time: Duration,
@@ -50,6 +60,7 @@ impl EncodedPacket {
         }
     }
 
+    /// Switch the data in the packet, optionally re-calculating the checksum.
     pub fn switch_data(&mut self, data: Vec<u8>, refresh_checksum: bool) {
         if refresh_checksum {
             self.checksum = adler32(&data.as_slice());
@@ -60,6 +71,7 @@ impl EncodedPacket {
     }
 }
 
+/// A processor that resizes and dithers images as needed.
 pub struct ProcessorPipeline {
     pub filter: fr::FilterType,
     pub width: u32,
@@ -68,6 +80,7 @@ pub struct ProcessorPipeline {
 }
 
 impl ProcessorPipeline {
+    /// Process an image, returning a vector with resized versions of it in every color mode requested.
     pub fn process(&self, img: &RgbaImage) -> Vec<(ColorMode, RgbImage)> {
         let src_image = fr::Image::from_vec_u8(
             NonZeroU32::new(img.width()).unwrap(),
@@ -107,6 +120,7 @@ impl ProcessorPipeline {
     }
 }
 
+/// A base trait for any ANSI image frame encoder, automatically implementing most of the encoding based on a few getter methods.
 pub trait AnsiEncoder {
     fn color(&self, pixel: &Rgb<u8>, fg: bool) -> String {
         match self.needs_color() {
@@ -177,11 +191,13 @@ pub trait AnsiEncoder {
     fn needs_color(&self) -> ColorMode;
 }
 
+/// A transformer that takes an object and converts it into an [EncodedPacket] if possible; else returning none.
 pub trait PacketTransformer {
     type Source;
     fn encode_packet(&self, src: &Self::Source) -> Option<EncodedPacket>;
 }
 
+/// A transformer that takes an [EncodedPacket] and converts it into an object if possible; else returning none.
 pub trait PacketDecoder {
     type Output;
     fn decode_packet(&mut self, src: EncodedPacket) -> Option<Self::Output>;

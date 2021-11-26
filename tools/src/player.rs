@@ -7,6 +7,7 @@ use std::collections::VecDeque;
 use std::pin::Pin;
 use tokio::time::{sleep, Instant};
 
+/// Plays video into a broadcast channel, timing each frame.
 pub async fn play(
     mut video_stream: Pin<Box<dyn Stream<Item = EncodedPacket> + Send>>,
     mut subtitle_stream: Pin<Box<dyn Stream<Item = SubtitlePacket> + Send>>,

@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio::io;
 use tokio_util::codec::{Decoder, Encoder};
 
+/// A codec that converts EncodedPacket's into bytes, compressing them if needed.
 pub struct PacketWriteCodec {
     compressor: zstd::block::Compressor,
 }
@@ -60,6 +61,7 @@ impl Encoder<EncodedPacket> for PacketWriteCodec {
     }
 }
 
+/// A codec that converts bytes into EncodedPacket's, decompressing them if needed and checking the contents with the packet checksum.
 pub struct PacketReadCodec {
     decompressor: zstd::block::Decompressor,
     decode_data: bool,
