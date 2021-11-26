@@ -1,5 +1,6 @@
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum ColorMode {
@@ -16,44 +17,69 @@ impl ColorMode {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum CompressionMode {
-    None,
-    Zstd,
-    ZstdDict(String), // base64 encoded
+impl fmt::Display for ColorMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ColorMode::True => write!(f, "true"),
+            ColorMode::EightBit => write!(f, "eight-bit"),
+        }
+    }
 }
 
-use subparse::SubtitleFormat;
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "SubtitleFormat")]
-enum SubtitleFormatDef {
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub enum CompressionMode {
+    None = 0,
+    Zstd = 1,
+}
+
+impl fmt::Display for CompressionMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompressionMode::None => write!(f, "none"),
+            CompressionMode::Zstd => write!(f, "zstd"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SubtitleFormat {
     SubRip,
     SubStationAlpha,
-    VobSubIdx,
-    VobSubSub,
-    MicroDVD,
+    Unknown(String),
+}
+
+impl SubtitleFormat {
+    pub fn from_codec_name(codec: &str) -> SubtitleFormat {
+        match codec {
+            "srt" => SubtitleFormat::SubRip,
+            "ssa" | "ass" => SubtitleFormat::SubStationAlpha,
+            _ => SubtitleFormat::Unknown(codec.to_owned()),
+        }
+    }
+}
+
+impl fmt::Display for SubtitleFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SubtitleFormat::SubStationAlpha => write!(f, "substation alpha (.ssa)"),
+            SubtitleFormat::SubRip => write!(f, "subrip (.srt)"),
+            SubtitleFormat::Unknown(ref s) => write!(f, "unsupported/unknown ({})", s),
+        }
+    }
 }
 
 #[derive(Builder, Serialize, Deserialize, Debug, Clone)]
 pub struct VideoTrack {
     #[builder(default)]
     pub name: Option<String>, // optional name for the track
-    pub framerate: f64,               // what framerate should this be played at
     pub color_mode: ColorMode,        // what color mode does the track use
     pub compression: CompressionMode, // how is the track compressed
     pub height: u32, // height in pixels (divide by two to get line count for terminal)
     pub width: u32,  // width in pixels
     pub encode_time: u64, // unix timestamp of time of encoding start
     #[builder(default)]
-    pub offset: u64, // position in file at which it starts
-    #[builder(default)]
-    pub length: u64, // position in file at which it ends,
-    #[builder(default)]
-    pub frame_lengths: Vec<u64>, // length of every frame
-    #[builder(default)]
-    pub frame_hashes: Vec<u32>, // adler32 hash of every frame
-    #[builder(default)]
-    pub frame_times: Vec<i64>, // time frame should be displayed at, in nanoseconds
+    pub codec_private: Option<Vec<u8>>,
+    pub index: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Builder, Clone)]
@@ -62,12 +88,10 @@ pub struct SubtitleTrack {
     pub name: Option<String>,
     #[builder(default)]
     pub lang: Option<String>,
-    #[serde(with = "SubtitleFormatDef")]
     pub format: SubtitleFormat, // format for the subtitles
     #[builder(default)]
-    pub offset: u64, // position in file at which it starts
-    #[builder(default)]
-    pub length: u64, // position in file at which it ends,
+    pub codec_private: Option<Vec<u8>>,
+    pub index: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

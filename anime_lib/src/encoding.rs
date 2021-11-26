@@ -1,5 +1,5 @@
 use super::{
-    metadata::ColorMode,
+    metadata::{ColorMode, CompressionMode},
     palette::{LABAnsiColorMap, REVERSE_PALETTE},
 };
 use fast_image_resize as fr;
@@ -10,150 +10,53 @@ use image::{
 };
 use simd_adler32::adler32;
 use std::collections::HashSet;
-use std::fs;
-use std::io::{self, Write};
+
 use std::num::NonZeroU32;
+use std::time::Duration;
 
-pub enum OutputStream<'a> {
-    File(fs::File),
-    CompressedFile(zstd::Encoder<'a, fs::File>),
+#[derive(Copy, Clone, Debug)]
+pub struct EncoderOptions {
+    pub compression_mode: CompressionMode,
+    pub compression_level: Option<i32>,
 }
 
-impl OutputStream<'_> {
-    pub fn write_all(&mut self, bytes: &[u8]) -> io::Result<()> {
-        match self {
-            OutputStream::File(f) => f.write_all(bytes),
-            OutputStream::CompressedFile(f) => f.write_all(bytes),
+#[derive(Debug, Clone)]
+pub struct EncodedPacket {
+    pub stream_index: u32,
+    pub checksum: u32,
+    pub length: u64,
+    pub time: Duration,
+    pub duration: Option<Duration>,
+    pub data: Vec<u8>,
+    pub encoder_opts: Option<EncoderOptions>,
+}
+
+impl EncodedPacket {
+    pub fn from_data(
+        stream_index: u32,
+        time: Duration,
+        duration: Option<Duration>,
+        data: Vec<u8>,
+        encoder_opts: Option<EncoderOptions>,
+    ) -> EncodedPacket {
+        EncodedPacket {
+            time,
+            duration,
+            checksum: adler32(&data.as_slice()),
+            length: data.len() as u64,
+            encoder_opts,
+            stream_index,
+            data,
         }
     }
 
-    pub fn finish(self) -> io::Result<fs::File> {
-        match self {
-            OutputStream::File(mut f) => {
-                f.flush()?;
-                Ok(f)
-            }
-            OutputStream::CompressedFile(f) => f.finish(),
-        }
-    }
-}
-
-pub trait Encoder {
-    fn needs_width(&self) -> u32;
-    fn needs_height(&self) -> u32;
-    fn needs_color(&self) -> ColorMode;
-
-    fn color(&self, pixel: &Rgb<u8>, fg: bool) -> String {
-        match self.needs_color() {
-            ColorMode::EightBit => {
-                if fg {
-                    format!(
-                        "\x1B[38;5;{}m",
-                        REVERSE_PALETTE[&(pixel[0], pixel[1], pixel[2])]
-                    )
-                } else {
-                    format!(
-                        "\x1B[48;5;{}m",
-                        REVERSE_PALETTE[&(pixel[0], pixel[1], pixel[2])]
-                    )
-                }
-            }
-            _ => {
-                if fg {
-                    format!(
-                        "\x1B[38;2;{r};{g};{b}m",
-                        r = pixel[0],
-                        g = pixel[1],
-                        b = pixel[2]
-                    )
-                } else {
-                    format!(
-                        "\x1B[48;2;{r};{g};{b}m",
-                        r = pixel[0],
-                        g = pixel[1],
-                        b = pixel[2]
-                    )
-                }
-            }
-        }
-    }
-
-    fn encode_frame(&self, img: &RgbImage) -> String {
-        let mut last_upper: Option<Rgb<u8>> = None;
-        let mut last_lower: Option<Rgb<u8>> = None;
-
-        let mut frame = String::with_capacity((img.width() * img.height()) as usize);
-        for y in (0..img.height() - 1).step_by(2) {
-            for x in 0..img.width() {
-                let upper = img.get_pixel(x, y);
-                let lower = img.get_pixel(x, y + 1);
-
-                if last_upper.is_none() || &last_upper.unwrap() != upper {
-                    frame += &self.color(upper, true);
-                }
-
-                if last_lower.is_none() || &last_lower.unwrap() != lower {
-                    frame += &self.color(lower, false);
-                }
-
-                frame += "▀";
-
-                last_upper = Some(*upper);
-                last_lower = Some(*lower);
-            }
-            frame += "\n";
+    pub fn switch_data(&mut self, data: Vec<u8>, refresh_checksum: bool) {
+        if refresh_checksum {
+            self.checksum = adler32(&data.as_slice());
         }
 
-        frame
-    }
-}
-
-pub trait IOEncoder<W: Write>: Encoder {
-    fn write_frame(&mut self, img: &RgbImage, time: i64) -> io::Result<()>;
-    fn finish(self) -> io::Result<(Vec<u64>, Vec<u32>, Vec<i64>, W)>; // lengths, hashes, times, inner writer
-}
-
-pub struct FileEncoder<'a> {
-    pub needs_width: u32,
-    pub needs_height: u32,
-    pub needs_color: ColorMode,
-    pub frame_lengths: Vec<u64>,
-    pub frame_hashes: Vec<u32>,
-    pub frame_times: Vec<i64>,
-    pub output: OutputStream<'a>,
-}
-
-impl Encoder for FileEncoder<'_> {
-    fn needs_color(&self) -> ColorMode {
-        self.needs_color
-    }
-
-    fn needs_height(&self) -> u32 {
-        self.needs_height
-    }
-
-    fn needs_width(&self) -> u32 {
-        self.needs_width
-    }
-}
-
-impl IOEncoder<fs::File> for FileEncoder<'_> {
-    fn write_frame(&mut self, img: &RgbImage, time: i64) -> io::Result<()> {
-        let frame = self.encode_frame(img);
-        let bytes = frame.as_bytes();
-        self.frame_lengths.push(bytes.len() as u64);
-        self.frame_hashes.push(adler32(&bytes));
-        self.frame_times.push(time);
-        self.output.write_all(bytes)
-    }
-
-    fn finish(self) -> io::Result<(Vec<u64>, Vec<u32>, Vec<i64>, fs::File)> {
-        Ok((
-            self.frame_lengths,
-            self.frame_hashes,
-            self.frame_times,
-            self.output.finish()?,
-        ))
+        self.length = data.len() as u64;
+        self.data = data;
     }
 }
 
@@ -202,4 +105,84 @@ impl ProcessorPipeline {
 
         res
     }
+}
+
+pub trait AnsiEncoder {
+    fn color(&self, pixel: &Rgb<u8>, fg: bool) -> String {
+        match self.needs_color() {
+            ColorMode::EightBit => {
+                if fg {
+                    format!(
+                        "\x1B[38;5;{}m",
+                        REVERSE_PALETTE[&(pixel[0], pixel[1], pixel[2])]
+                    )
+                } else {
+                    format!(
+                        "\x1B[48;5;{}m",
+                        REVERSE_PALETTE[&(pixel[0], pixel[1], pixel[2])]
+                    )
+                }
+            }
+            _ => {
+                if fg {
+                    format!(
+                        "\x1B[38;2;{r};{g};{b}m",
+                        r = pixel[0],
+                        g = pixel[1],
+                        b = pixel[2]
+                    )
+                } else {
+                    format!(
+                        "\x1B[48;2;{r};{g};{b}m",
+                        r = pixel[0],
+                        g = pixel[1],
+                        b = pixel[2]
+                    )
+                }
+            }
+        }
+    }
+
+    fn encode_frame(&self, image: &RgbImage) -> String {
+        let mut last_upper: Option<Rgb<u8>> = None;
+        let mut last_lower: Option<Rgb<u8>> = None;
+
+        let mut frame = String::with_capacity((image.width() * image.height()) as usize);
+        for y in (0..image.height() - 1).step_by(2) {
+            for x in 0..image.width() {
+                let upper = image.get_pixel(x, y);
+                let lower = image.get_pixel(x, y + 1);
+
+                if last_upper.is_none() || &last_upper.unwrap() != upper {
+                    frame += &self.color(upper, true);
+                }
+
+                if last_lower.is_none() || &last_lower.unwrap() != lower {
+                    frame += &self.color(lower, false);
+                }
+
+                frame += "▀";
+
+                last_upper = Some(*upper);
+                last_lower = Some(*lower);
+            }
+            frame += "\n";
+        }
+
+        frame
+    }
+
+    fn needs_width(&self) -> u32;
+    fn needs_height(&self) -> u32;
+    fn needs_color(&self) -> ColorMode;
+}
+
+pub trait PacketTransformer {
+    type Source;
+    fn encode_packet(&self, src: &Self::Source) -> Option<EncodedPacket>;
+}
+
+pub trait PacketDecoder {
+    type Output;
+    fn decode_packet(&mut self, src: EncodedPacket) -> Option<Self::Output>;
 }

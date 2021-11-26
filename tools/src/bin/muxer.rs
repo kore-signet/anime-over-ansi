@@ -1,13 +1,19 @@
 use anime_telnet::{encoding::*, metadata::*, palette::PALETTE};
+use anime_telnet_encoder::{ANSIVideoEncoder, PacketWriteCodec as PacketCodec};
 use clap::Arg;
 
-use std::fs::File;
-use std::io::{self, prelude::*, BufReader, BufWriter};
+use cyanotype::*;
+
+use std::time::SystemTime;
+use tokio_util::codec::FramedWrite;
+
+use futures::sink::SinkExt;
 
 use image::RgbImage;
-use std::time::SystemTime;
+use rmp_serde as rmps;
 
-use tempfile::tempfile;
+use std::time::Duration;
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufReader};
 
 pub fn is_eof<T>(err: &io::Result<T>) -> bool {
     match err {
@@ -17,7 +23,8 @@ pub fn is_eof<T>(err: &io::Result<T>) -> bool {
 }
 
 // takes raw RGB24 or 8bit stream and muxes it into a container
-fn main() -> std::io::Result<()> {
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
     let matches = clap::App::new("ansi.moe muxer")
         .version("1.0")
         .author("allie signet <allie@cat-girl.gay>")
@@ -100,27 +107,7 @@ fn main() -> std::io::Result<()> {
         _ => panic!(),
     };
 
-    let mut encoder = FileEncoder {
-        needs_width: width,
-        needs_height: height,
-        needs_color: color_mode,
-        frame_lengths: Vec::new(),
-        frame_hashes: Vec::new(),
-        frame_times: Vec::new(),
-        output: {
-            let file = tempfile().unwrap();
-            if compression_mode == CompressionMode::Zstd {
-                OutputStream::CompressedFile({
-                    let encoder = zstd::Encoder::new(file, 3).unwrap(); // todo, make configurable
-                    encoder
-                })
-            } else {
-                OutputStream::File(file)
-            }
-        },
-    };
-
-    let mut track = VideoTrack {
+    let track = VideoTrack {
         name: None,
         color_mode,
         height,
@@ -130,15 +117,35 @@ fn main() -> std::io::Result<()> {
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs(),
-        framerate: fps,
-        offset: 0,
-        length: 0,
-        frame_lengths: Vec::new(),
-        frame_hashes: Vec::new(),
-        frame_times: Vec::new(),
+        codec_private: None,
+        index: 0,
     };
 
-    let input_fs = File::open(matches.value_of("INPUT").unwrap()).unwrap();
+    let encoder = ANSIVideoEncoder {
+        stream_index: 0,
+        width,
+        height,
+        color_mode,
+        encoder_opts: EncoderOptions {
+            compression_level: Some(3),
+            compression_mode: compression_mode,
+        },
+    };
+
+    let mut out_file = tokio::fs::File::create(matches.value_of("OUT").unwrap()).await?;
+    let metadata_bytes = rmps::to_vec(&VideoMetadata {
+        video_tracks: vec![track],
+        subtitle_tracks: vec![],
+    })
+    .unwrap();
+
+    out_file.write_u64(metadata_bytes.len() as u64).await?;
+    out_file.write_all(&metadata_bytes).await?;
+    let mut out_stream = FramedWrite::new(out_file, PacketCodec::new()).buffer(256);
+
+    let input_fs = tokio::fs::File::open(matches.value_of("INPUT").unwrap())
+        .await
+        .unwrap();
     let mut input_r = BufReader::new(input_fs);
 
     let mut buffer: Vec<u8> = vec![0u8; width as usize * height as usize * color_mode.byte_size()];
@@ -149,14 +156,14 @@ fn main() -> std::io::Result<()> {
     let interval_nanos = (1000000000.0 / fps) as i64;
 
     loop {
-        let read_res = input_r.read_exact(&mut buffer);
+        let read_res = input_r.read_exact(&mut buffer).await;
         if is_eof(&read_res) {
             break;
         } else {
-            read_res.unwrap();
+            read_res?;
         }
 
-        let img = if color_mode == ColorMode::True {
+        let frame = if color_mode == ColorMode::True {
             RgbImage::from_raw(width, height, buffer.clone()).expect("couldn't read image")
         } else {
             let mut transformed_buffer: Vec<u8> =
@@ -170,40 +177,17 @@ fn main() -> std::io::Result<()> {
             RgbImage::from_raw(width, height, transformed_buffer).expect("couldn't read image")
         };
 
-        encoder
-            .write_frame(&img, interval_nanos * i)
-            .expect("couldn't write frame");
+        let packet = VideoPacket {
+            frame,
+            time: Duration::from_nanos((interval_nanos * i) as u64),
+        };
+
+        out_stream
+            .feed(encoder.encode_packet(&packet).unwrap())
+            .await?;
+
         i += 1;
     }
 
-    println!("done reading frames, encoding finished file");
-
-    let out_fs = File::create(matches.value_of("OUT").unwrap()).unwrap();
-    let mut out_writer = BufWriter::new(out_fs);
-
-    let (frame_lengths, frame_hashes, frame_times, mut file) = encoder.finish().unwrap();
-
-    file.flush().unwrap();
-
-    track.frame_hashes = frame_hashes;
-    track.frame_lengths = frame_lengths;
-    track.frame_times = frame_times;
-    track.offset = 0;
-    track.length = file.metadata().unwrap().len();
-
-    file.rewind().unwrap();
-
-    let metadata_bytes = serde_json::to_vec(&VideoMetadata {
-        video_tracks: vec![track],
-        subtitle_tracks: Vec::new(),
-    })
-    .unwrap();
-    out_writer
-        .write_all(&(metadata_bytes.len() as u64).to_be_bytes())
-        .unwrap();
-    out_writer.write_all(&metadata_bytes).unwrap();
-
-    io::copy(&mut file, &mut out_writer).unwrap();
-
-    Ok(())
+    out_stream.close().await
 }
