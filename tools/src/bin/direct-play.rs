@@ -4,7 +4,6 @@ use clap::Arg;
 
 use cyanotype::*;
 use std::collections::HashSet;
-use std::fs::File;
 
 use fast_image_resize as fr;
 
@@ -63,12 +62,11 @@ async fn main() -> std::io::Result<()> {
         )
         .get_matches();
 
-    ac_ffmpeg::set_log_callback(|_, m| {
-        println!("ffmpeg: {}", m);
+    ac_ffmpeg::set_log_callback(|_, _| {
+        // println!("ffmpeg: {}", m);
     });
 
-    let input_file = File::open(matches.value_of("INPUT").unwrap()).unwrap();
-    let mut demuxer = Demuxer::from_seek(input_file).unwrap();
+    let mut demuxer = Demuxer::from_url(matches.value_of("INPUT").unwrap()).unwrap();
     demuxer.block_video_streams(true);
     let theme = dialoguer::theme::ColorfulTheme::default();
 
@@ -196,6 +194,8 @@ async fn main() -> std::io::Result<()> {
     let video_stream = demuxer
         .subscribe_to_video(*demuxer.video_streams.keys().next().unwrap())
         .unwrap();
+
+    demuxer.block_video_streams(false);
 
     let demuxer_task = tokio::task::spawn(async move {
         demuxer.run().await.unwrap();

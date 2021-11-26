@@ -6,7 +6,6 @@ use clap::Arg;
 
 use cyanotype::*;
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
 
 use indicatif::{MultiProgress, ProgressDrawTarget};
 use std::time::SystemTime;
@@ -132,12 +131,7 @@ async fn main() -> std::io::Result<()> {
         )
         .get_matches();
 
-    ac_ffmpeg::set_log_callback(|_, m| {
-        println!("ffmpeg: {}", m);
-    });
-
-    let input_file = File::open(matches.value_of("INPUT").unwrap()).unwrap();
-    let mut demuxer = Demuxer::from_seek(input_file).unwrap();
+    let mut demuxer = Demuxer::from_url(matches.value_of("INPUT").unwrap()).unwrap();
     demuxer.block_video_streams(true);
 
     let mut track_index: i32 = -1;
@@ -476,6 +470,7 @@ async fn main() -> std::io::Result<()> {
         .subscribe_to_video(*demuxer.video_streams.keys().next().unwrap())
         .unwrap();
 
+    demuxer.block_video_streams(false);
     let demuxer_task = tokio::task::spawn(async move {
         demuxer.run().await.unwrap();
     });
