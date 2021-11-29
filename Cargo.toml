@@ -2,5 +2,5 @@
 members = [
     "anime_lib",
     "tools",
-    "play"
+    "play",
 ]

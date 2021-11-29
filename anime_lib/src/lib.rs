@@ -6,3 +6,6 @@ pub mod palette;
 pub mod pattern;
 pub mod subtitles;
 pub use err::*;
+
+#[cfg(feature = "cuda")]
+pub mod cuda;

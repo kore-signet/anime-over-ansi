@@ -75,6 +75,8 @@ pub struct ProcessorPipeline {
     pub width: u32,
     pub height: u32,
     pub dither_modes: HashSet<DitherMode>,
+    // #[cfg(feature = "cuda")]
+    // pub ditherer: Option<crate::cuda::CudaDither>
 }
 
 impl ProcessorPipeline {
@@ -119,6 +121,12 @@ impl ProcessorPipeline {
                 &DitherMode::None => {
                     res.push((*mode, frame.clone()));
                 }
+                // #[cfg(feature = "cuda")]
+                // &DitherMode::Cuda(multiplier) => {
+                //     res.push((*mode, self.ditherer.as_ref().unwrap().dither(&frame, multiplier as f32 / 10_000.0)))
+                // }
+                // #[cfg(not(feature = "cuda"))]
+                _ => unimplemented!()
             }
         }
 

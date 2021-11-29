@@ -7,6 +7,7 @@ pub enum DitherMode {
     None,
     FloydSteinberg,
     Pattern(usize, u32), //matrix size, multiplier
+    Cuda(u32) // multiplier
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
