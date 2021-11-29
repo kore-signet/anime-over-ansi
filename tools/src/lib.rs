@@ -4,7 +4,7 @@ pub use codec::*;
 pub mod subtitles;
 
 use anime_telnet::encoding::{AnsiEncoder, EncodedPacket, EncoderOptions, PacketTransformer};
-use anime_telnet::metadata::ColorMode;
+use anime_telnet::metadata::{ColorMode, DitherMode};
 use futures::stream::Stream;
 use image::RgbImage;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -43,7 +43,7 @@ impl PacketTransformer for SpinnyANSIVideoEncoder {
             self.underlying.stream_index,
             packet.time,
             None,
-            self.underlying.encode_frame(&packet.frame).into_bytes(),
+            self.underlying.encode_frame(&packet.frame).0.into_bytes(),
             Some(self.underlying.encoder_opts),
         ))
     }
@@ -54,6 +54,7 @@ pub struct ANSIVideoEncoder {
     pub width: u32,
     pub height: u32,
     pub color_mode: ColorMode,
+    pub dither_mode: DitherMode,
     pub encoder_opts: EncoderOptions,
 }
 
@@ -69,6 +70,10 @@ impl AnsiEncoder for ANSIVideoEncoder {
     fn needs_width(&self) -> u32 {
         self.width
     }
+
+    fn needs_dither(&self) -> DitherMode {
+        self.dither_mode
+    }
 }
 
 impl PacketTransformer for ANSIVideoEncoder {
@@ -79,7 +84,7 @@ impl PacketTransformer for ANSIVideoEncoder {
             self.stream_index,
             packet.time,
             None,
-            self.encode_frame(&packet.frame).into_bytes(),
+            self.encode_frame(&packet.frame).0.into_bytes(),
             Some(self.encoder_opts),
         ))
     }

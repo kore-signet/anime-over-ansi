@@ -10,6 +10,7 @@ lab = "0.11.0"
 derive_builder = "0.10.2"
 simd-adler32 = "0.3.4"
 thiserror = "1"
+rayon = "1.5.1"
 
 [dependencies.argmm]
 git = "https://github.com/alisww/argmm"

@@ -10,11 +10,10 @@ use lab::Lab;
 
 lazy_static! {
     /// Static ansi256 palette in LAB format, converted from RGB.
-    static ref LAB_PALETTE: [(f32, f32, f32); 256] = {
+    pub static ref LAB_PALETTE: [(f32, f32, f32); 256] = {
         let mut pal = [(0.0f32,0.0f32,0.0f32); 256];
         for i in 0..256 {
-            let (r, g, b) = PALETTE[i];
-            let lab = Lab::from_rgb(&[r, g, b]);
+            let lab = Lab::from_rgb(&PALETTE[i]);
             pal[i] = (lab.l, lab.a, lab.b)
         }
 
@@ -25,8 +24,7 @@ lazy_static! {
     static ref LAB_PALETTE_FLATTENED: [f32; 1024] = {
         let mut pal = [0.0f32; 1024];
         for i in 0..256 {
-            let (r, g, b) = PALETTE[i];
-            let lab = Lab::from_rgb(&[r, g, b]);
+            let lab = Lab::from_rgb(&PALETTE[i]);
             pal[i * 4] = lab.l;
             pal[i * 4 + 1] = lab.a;
             pal[i * 4 + 2] = lab.b;
@@ -40,7 +38,7 @@ lazy_static! {
 /// Get closest ansi256 color using DeltaE distance. Accelerated with AVX instructions.
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx")]
-pub unsafe fn closest_ansi_avx(r: u8, g: u8, b: u8) -> u8 {
+pub unsafe fn closest_ansi_avx(r: u8, g: u8, b: u8) -> (u8, f32) {
     #[cfg(target_arch = "x86")]
     use std::arch::x86::*;
     #[cfg(target_arch = "x86_64")]
@@ -74,13 +72,14 @@ pub unsafe fn closest_ansi_avx(r: u8, g: u8, b: u8) -> u8 {
             *res_array.get_unchecked_mut(start + 3) = tmp.get_unchecked(6) + tmp.get_unchecked(7);
         });
 
-    res_array.argmin().unwrap() as u8
+    let v = res_array.argmin().unwrap();
+    (v as u8, *res_array.get_unchecked(v))
 }
 
 /// Get closest ansi256 color using DeltaE distance. Accelerated with SSE instructions.
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "sse")]
-pub unsafe fn closest_ansi_sse(r: u8, g: u8, b: u8) -> u8 {
+pub unsafe fn closest_ansi_sse(r: u8, g: u8, b: u8) -> (u8, f32) {
     #[cfg(target_arch = "x86")]
     use std::arch::x86::*;
     #[cfg(target_arch = "x86_64")]
@@ -107,11 +106,12 @@ pub unsafe fn closest_ansi_sse(r: u8, g: u8, b: u8) -> u8 {
                 + res_array.get_unchecked(2);
         });
 
-    results.argmin().unwrap() as u8
+    let v = res_array.argmin().unwrap();
+    (v as u8, *res_array.get_unchecked(v))
 }
 
 /// Get closest ansi256 color using DeltaE distance. No acceleration.
-pub fn closest_ansi_scalar(r: u8, g: u8, b: u8) -> u8 {
+pub fn closest_ansi_scalar(r: u8, g: u8, b: u8) -> (u8, f32) {
     let lab = Lab::from_rgb(&[r, g, b]);
     let mut results: [f32; 256] = [0.0; 256];
     for i in 0..256 {
@@ -119,11 +119,12 @@ pub fn closest_ansi_scalar(r: u8, g: u8, b: u8) -> u8 {
         results[i] = (lab.l - p_l).powi(2) + (lab.a - p_a).powi(2) + (lab.b - p_b).powi(2);
     }
 
-    results.argmin().unwrap() as u8
+    let v = results.argmin().unwrap();
+    (v as u8, results[v])
 }
 
 /// Get closest ansi256 color using DeltaE distance. Accelerated with SIMD intrinsics if available.
-pub fn closest_ansi(r: u8, g: u8, b: u8) -> u8 {
+pub fn closest_ansi(r: u8, g: u8, b: u8) -> (u8, f32) {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("avx") {

@@ -17,10 +17,7 @@ pub async fn play(
     let play_start = Instant::now();
     loop {
         tokio::select! {
-            Some(mut video_frame) = video_stream.next() => {
-                video_frame.data.pop();
-
-
+            Some(video_frame) = video_stream.next() => {
                 subtitle_buffer.retain(|v| {
                     if let SubtitlePacket::SRTEntry(e) = v {
                         e.end >= video_frame.time
@@ -40,7 +37,7 @@ pub async fn play(
                // clean term; send frame; clear ansi styling
                 output.broadcast(b"\x1B[1;1H".to_vec()).await?;
                 output.broadcast(video_frame.data).await?;
-                output.broadcast(b"\x1B[0m\n".to_vec()).await?;
+                output.broadcast(b"\x1B[0m".to_vec()).await?;
 
                 // show subtitle if available
                 if let Some(SubtitlePacket::SRTEntry(e)) = subtitle_buffer.front() {

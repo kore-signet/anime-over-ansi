@@ -158,6 +158,20 @@ async fn main() -> std::io::Result<()> {
                 })
                 .unwrap_or(ColorMode::EightBit);
 
+            let dither_mode = if color_mode == ColorMode::EightBit {
+                one_of_keys(&mut map, vec!["dither", "dithering", "dithering-mode"])
+                    .map(|c| match c.as_str() {
+                        "floyd-steinberg" | "error-diffusion" => DitherMode::FloydSteinberg,
+                        "ordered-2x2" => DitherMode::Pattern(2),
+                        "ordered-4x4" => DitherMode::Pattern(4),
+                        "ordered-8x8" => DitherMode::Pattern(8),
+                        _ => panic!("invalid dithering mode: possible ones are 'floyd-steinberg', 'ordered-2x2', 'ordered-4x4', 'ordered-8x8'")
+                    })
+                    .unwrap_or(DitherMode::FloydSteinberg)
+            } else {
+                DitherMode::None
+            };
+
             let height = one_of_keys(&mut map, vec!["h", "height"])
                 .map(|h| h.parse::<u32>().expect("invalid number for height"))
                 .unwrap_or(108);
@@ -189,6 +203,7 @@ async fn main() -> std::io::Result<()> {
                         width,
                         height,
                         color_mode,
+                        dither_mode,
                         encoder_opts: EncoderOptions {
                             compression_level: Some(compression_level.unwrap_or(3)),
                             compression_mode: compression,
@@ -258,6 +273,26 @@ async fn main() -> std::io::Result<()> {
                     _ => panic!(),
                 };
 
+                let dither_mode = if color_mode == ColorMode::EightBit {
+                    [
+                        DitherMode::FloydSteinberg,
+                        DitherMode::Pattern(2),
+                        DitherMode::Pattern(4),
+                        DitherMode::Pattern(8),
+                    ][dialoguer::Select::with_theme(&theme)
+                        .with_prompt("dithering mode")
+                        .items(&[
+                            "floyd-steinberg",
+                            "ordered pattern dithering (2x2)",
+                            "ordered pattern dithering (4x4)",
+                            "ordered pattern dithering (8x8)",
+                        ])
+                        .interact()
+                        .unwrap()]
+                } else {
+                    DitherMode::None
+                };
+
                 let compression = match dialoguer::Select::with_theme(&theme)
                     .with_prompt("compression mode")
                     .items(&["zstd", "none"])
@@ -277,6 +312,7 @@ async fn main() -> std::io::Result<()> {
                         width,
                         height,
                         color_mode,
+                        dither_mode,
                         encoder_opts: EncoderOptions {
                             compression_level: Some(3),
                             compression_mode: compression,
@@ -460,10 +496,10 @@ async fn main() -> std::io::Result<()> {
                 width: e.underlying.width,
                 height: e.underlying.height,
                 filter: resize_filter,
-                color_modes: HashSet::new(),
+                dither_modes: HashSet::new(),
             })
-            .color_modes
-            .insert(e.underlying.color_mode);
+            .dither_modes
+            .insert(e.underlying.dither_mode);
     }
 
     let video_stream = demuxer
@@ -489,7 +525,7 @@ async fn main() -> std::io::Result<()> {
                         .into_iter()
                         .map(move |r| ((p.width, p.height, r.0), VideoPacket { frame: r.1, time }))
                 })
-                .collect::<HashMap<(u32, u32, ColorMode), VideoPacket<RgbImage>>>()
+                .collect::<HashMap<(u32, u32, DitherMode), VideoPacket<RgbImage>>>()
         })
         .flat_map(|frames| {
             futures::stream::iter(encoders.iter().map(move |encoder| {
@@ -498,7 +534,7 @@ async fn main() -> std::io::Result<()> {
                         &frames[&(
                             encoder.underlying.width,
                             encoder.underlying.height,
-                            encoder.underlying.color_mode,
+                            encoder.underlying.dither_mode,
                         )],
                     )
                     .unwrap())

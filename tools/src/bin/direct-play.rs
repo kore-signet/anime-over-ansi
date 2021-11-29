@@ -91,11 +91,32 @@ async fn main() -> std::io::Result<()> {
         _ => panic!(),
     };
 
+    let dither_mode = if color_mode == ColorMode::EightBit {
+        [
+            DitherMode::FloydSteinberg,
+            DitherMode::Pattern(2),
+            DitherMode::Pattern(4),
+            DitherMode::Pattern(8),
+        ][dialoguer::Select::with_theme(&theme)
+            .with_prompt("dithering mode")
+            .items(&[
+                "floyd-steinberg",
+                "ordered pattern dithering (2x2)",
+                "ordered pattern dithering (4x4)",
+                "ordered pattern dithering (8x8)",
+            ])
+            .interact()
+            .unwrap()]
+    } else {
+        DitherMode::None
+    };
+
     let encoder = ANSIVideoEncoder {
         stream_index: 0,
         width,
         height,
         color_mode,
+        dither_mode,
         encoder_opts: EncoderOptions {
             compression_level: None,
             compression_mode: CompressionMode::None,
@@ -188,7 +209,7 @@ async fn main() -> std::io::Result<()> {
         width: encoder.width,
         height: encoder.height,
         filter: resize_filter,
-        color_modes: HashSet::from([encoder.color_mode]),
+        dither_modes: HashSet::from([encoder.dither_mode]),
     };
 
     let video_stream = demuxer

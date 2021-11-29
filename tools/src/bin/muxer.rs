@@ -126,6 +126,7 @@ async fn main() -> std::io::Result<()> {
         width,
         height,
         color_mode,
+        dither_mode: DitherMode::None,
         encoder_opts: EncoderOptions {
             compression_level: Some(3),
             compression_mode: compression_mode,
@@ -169,7 +170,7 @@ async fn main() -> std::io::Result<()> {
             let mut transformed_buffer: Vec<u8> =
                 Vec::with_capacity(width as usize * height as usize * 3);
             for b in &buffer {
-                let (r, g, b) = PALETTE[*b as usize];
+                let [r, g, b] = PALETTE[*b as usize];
                 transformed_buffer.push(r);
                 transformed_buffer.push(g);
                 transformed_buffer.push(b);

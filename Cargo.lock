@@ -5,7 +5,7 @@ version = 3
 [[package]]
 name = "ac-ffmpeg"
 version = "0.17.1"
-source = "git+https://github.com/alisww/rust-ac-ffmpeg.git#e985f8f645bf62b4f9acb3fedd0437544340ac98"
+source = "git+https://github.com/alisww/rust-ac-ffmpeg.git#52775d540d65ee0b09e1e0f844b7ee0cb3aa118e"
 dependencies = [
  "cc",
  "lazy_static",
@@ -24,6 +24,7 @@ dependencies = [
  "lab",
  "lazy_static",
  "rand",
+ "rayon",
  "serde",
  "simd-adler32",
  "thiserror",
@@ -316,7 +317,7 @@ dependencies = [
 [[package]]
 name = "cyanotype"
 version = "0.1.0"
-source = "git+https://github.com/alisww/cyanotype.git#59f0c90a4d91a888e2d8922592caeb48ee3161a1"
+source = "git+https://github.com/alisww/cyanotype.git#4131197932f71b678f522e56edaed7edcc621d4e"
 dependencies = [
  "ac-ffmpeg",
  "async-broadcast",

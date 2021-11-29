@@ -1,13 +1,10 @@
 use super::{
-    metadata::{ColorMode, CompressionMode},
+    metadata::{ColorMode, CompressionMode, DitherMode},
     palette::{LABAnsiColorMap, REVERSE_PALETTE},
+    pattern,
 };
 use fast_image_resize as fr;
-use image::{
-    buffer::ConvertBuffer,
-    imageops::{self},
-    Rgb, RgbImage, RgbaImage,
-};
+use image::{buffer::ConvertBuffer, imageops, Rgb, RgbImage, RgbaImage};
 use simd_adler32::adler32;
 use std::collections::HashSet;
 
@@ -76,12 +73,12 @@ pub struct ProcessorPipeline {
     pub filter: fr::FilterType,
     pub width: u32,
     pub height: u32,
-    pub color_modes: HashSet<ColorMode>,
+    pub dither_modes: HashSet<DitherMode>,
 }
 
 impl ProcessorPipeline {
     /// Process an image, returning a vector with resized versions of it in every color mode requested.
-    pub fn process(&self, img: &RgbaImage) -> Vec<(ColorMode, RgbImage)> {
+    pub fn process(&self, img: &RgbaImage) -> Vec<(DitherMode, RgbImage)> {
         let src_image = fr::Image::from_vec_u8(
             NonZeroU32::new(img.width()).unwrap(),
             NonZeroU32::new(img.height()).unwrap(),
@@ -104,15 +101,23 @@ impl ProcessorPipeline {
                 .unwrap()
                 .convert();
 
-        let mut res = Vec::with_capacity(self.color_modes.len());
+        let mut res = Vec::with_capacity(self.dither_modes.len());
 
-        for mode in &self.color_modes {
-            if mode == &ColorMode::EightBit {
-                let mut dframe = frame.clone();
-                imageops::dither(&mut dframe, &LABAnsiColorMap);
-                res.push((*mode, dframe));
-            } else {
-                res.push((*mode, frame.clone()));
+        for mode in &self.dither_modes {
+            match mode {
+                &DitherMode::FloydSteinberg => {
+                    let mut dframe = frame.clone();
+                    imageops::dither(&mut dframe, &LABAnsiColorMap);
+                    res.push((*mode, dframe));
+                }
+                &DitherMode::Pattern(size) => {
+                    let mut dframe = frame.clone();
+                    pattern::dither(&mut dframe, size);
+                    res.push((*mode, dframe));
+                }
+                &DitherMode::None => {
+                    res.push((*mode, frame.clone()));
+                }
             }
         }
 
@@ -126,15 +131,9 @@ pub trait AnsiEncoder {
         match self.needs_color() {
             ColorMode::EightBit => {
                 if fg {
-                    format!(
-                        "\x1B[38;5;{}m",
-                        REVERSE_PALETTE[&(pixel[0], pixel[1], pixel[2])]
-                    )
+                    format!("\x1B[38;5;{}m", REVERSE_PALETTE[&pixel.0])
                 } else {
-                    format!(
-                        "\x1B[48;5;{}m",
-                        REVERSE_PALETTE[&(pixel[0], pixel[1], pixel[2])]
-                    )
+                    format!("\x1B[48;5;{}m", REVERSE_PALETTE[&pixel.0])
                 }
             }
             _ => {
@@ -157,9 +156,10 @@ pub trait AnsiEncoder {
         }
     }
 
-    fn encode_frame(&self, image: &RgbImage) -> String {
+    fn encode_frame(&self, image: &RgbImage) -> (String, u32) {
         let mut last_upper: Option<Rgb<u8>> = None;
         let mut last_lower: Option<Rgb<u8>> = None;
+        let mut instructions = 0;
 
         let mut frame = String::with_capacity((image.width() * image.height()) as usize);
         for y in (0..image.height() - 1).step_by(2) {
@@ -169,10 +169,12 @@ pub trait AnsiEncoder {
 
                 if last_upper.is_none() || &last_upper.unwrap() != upper {
                     frame += &self.color(upper, true);
+                    instructions += 1;
                 }
 
                 if last_lower.is_none() || &last_lower.unwrap() != lower {
                     frame += &self.color(lower, false);
+                    instructions += 1;
                 }
 
                 frame += "▀";
@@ -180,15 +182,19 @@ pub trait AnsiEncoder {
                 last_upper = Some(*upper);
                 last_lower = Some(*lower);
             }
-            frame += "\n";
+            frame += &format!("\x1b[1E");
+            instructions += 1;
         }
 
-        frame
+        (frame, instructions)
     }
 
     fn needs_width(&self) -> u32;
     fn needs_height(&self) -> u32;
     fn needs_color(&self) -> ColorMode;
+    fn needs_dither(&self) -> DitherMode {
+        DitherMode::None
+    }
 }
 
 /// A transformer that takes an object and converts it into an [EncodedPacket] if possible; else returning none.

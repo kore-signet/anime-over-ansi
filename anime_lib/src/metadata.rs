@@ -3,6 +3,13 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub enum DitherMode {
+    None,
+    FloydSteinberg,
+    Pattern(usize),
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum ColorMode {
     True,
     EightBit,
