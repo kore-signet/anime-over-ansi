@@ -28,7 +28,7 @@ impl SSAEncoder {
 impl PacketTransformer for SSAEncoder {
     type Source = SubtitlePacket;
 
-    fn encode_packet(&self, src: &Self::Source) -> Option<EncodedPacket> {
+    fn encode_packet(&mut self, src: &Self::Source) -> Option<EncodedPacket> {
         if let SubtitlePacket::SSAEntry(entry) = src {
             let mut line = String::new();
             for def in self.definitions.iter().map(|v| v.as_str()) {
@@ -78,7 +78,7 @@ impl SRTEncoder {
 impl PacketTransformer for SRTEncoder {
     type Source = SubtitlePacket;
 
-    fn encode_packet(&self, src: &Self::Source) -> Option<EncodedPacket> {
+    fn encode_packet(&mut self, src: &Self::Source) -> Option<EncodedPacket> {
         if let SubtitlePacket::SRTEntry(entry) = src {
             Some(EncodedPacket::from_data(
                 self.stream_index,
@@ -107,7 +107,7 @@ impl PassthroughSubtitleEncoder {
 impl PacketTransformer for PassthroughSubtitleEncoder {
     type Source = SubtitlePacket;
 
-    fn encode_packet(&self, src: &Self::Source) -> Option<EncodedPacket> {
+    fn encode_packet(&mut self, src: &Self::Source) -> Option<EncodedPacket> {
         if let SubtitlePacket::Raw { start, end, data } = src {
             Some(EncodedPacket::from_data(
                 self.stream_index,
@@ -154,7 +154,7 @@ pub async fn ssa_file_to_packets(
 
     subtitle_track.codec_private = Some(codec_private.into_bytes());
 
-    let encoder = SSAEncoder::new(
+    let mut encoder = SSAEncoder::new(
         subtitle_track.index,
         vec![
             "ReadOrder",
@@ -199,7 +199,7 @@ pub async fn srt_file_to_packets(
 ) -> io::Result<Pin<Box<dyn Stream<Item = std::io::Result<EncodedPacket>>>>> {
     let mut contents = String::new();
     f.read_to_string(&mut contents).await?;
-    let encoder = SRTEncoder::new(stream_index);
+    let mut encoder = SRTEncoder::new(stream_index);
 
     Ok(stream::iter(
         subrip::entries(&contents)

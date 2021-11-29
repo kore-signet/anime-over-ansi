@@ -19,7 +19,7 @@ use image::RgbImage;
 use rmp_serde as rmps;
 use std::path::Path;
 use std::pin::Pin;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{self, AsyncWriteExt};
 
 // gets and removes value from hashmap for whichever one of the keys exists in it
 fn one_of_keys(map: &mut HashMap<String, String>, keys: Vec<&'static str>) -> Option<String> {
@@ -129,7 +129,24 @@ async fn main() -> std::io::Result<()> {
                     "bilinear",
                 ]),
         )
+        .arg(
+            Arg::with_name("diff")
+                .help("use diffing algorithm when optimal")
+                .long("diff"),
+        )
+        .arg(
+            Arg::with_name("pattern_percent")
+                .long("dither-percent")
+                .takes_value(true)
+                .help("error calculation % for pattern dithering"),
+        )
         .get_matches();
+
+    let pattern_percent = if let Some(v) = matches.value_of("pattern_percent") {
+        ((v.parse::<f64>().expect("invalid percentage")) * 100.0) as u32
+    } else {
+        900
+    };
 
     let mut demuxer = Demuxer::from_url(matches.value_of("INPUT").unwrap()).unwrap();
     demuxer.block_video_streams(true);
@@ -139,7 +156,7 @@ async fn main() -> std::io::Result<()> {
     let progress_bars = MultiProgress::new();
     progress_bars.set_draw_target(ProgressDrawTarget::hidden());
 
-    let (encoders, video_tracks) = if let Some(vals) = matches.values_of("track") {
+    let (mut encoders, video_tracks) = if let Some(vals) = matches.values_of("track") {
         vals.map(|cfg| {
             let mut map: HashMap<String, String> = cfg
                 .split_terminator(',')
@@ -162,9 +179,9 @@ async fn main() -> std::io::Result<()> {
                 one_of_keys(&mut map, vec!["dither", "dithering", "dithering-mode"])
                     .map(|c| match c.as_str() {
                         "floyd-steinberg" | "error-diffusion" => DitherMode::FloydSteinberg,
-                        "ordered-2x2" => DitherMode::Pattern(2),
-                        "ordered-4x4" => DitherMode::Pattern(4),
-                        "ordered-8x8" => DitherMode::Pattern(8),
+                        "ordered-2x2" => DitherMode::Pattern(2, pattern_percent),
+                        "ordered-4x4" => DitherMode::Pattern(4, pattern_percent),
+                        "ordered-8x8" => DitherMode::Pattern(8, pattern_percent),
                         _ => panic!("invalid dithering mode: possible ones are 'floyd-steinberg', 'ordered-2x2', 'ordered-4x4', 'ordered-8x8'")
                     })
                     .unwrap_or(DitherMode::FloydSteinberg)
@@ -204,10 +221,13 @@ async fn main() -> std::io::Result<()> {
                         height,
                         color_mode,
                         dither_mode,
-                        encoder_opts: EncoderOptions {
+                        diff: matches.is_present("diff"),
+                        encoder_opts: PacketFlags {
                             compression_level: Some(compression_level.unwrap_or(3)),
                             compression_mode: compression,
+                            is_keyframe: true
                         },
+                        last_frame: None
                     },
                     &progress_bars,
                 ),
@@ -276,9 +296,9 @@ async fn main() -> std::io::Result<()> {
                 let dither_mode = if color_mode == ColorMode::EightBit {
                     [
                         DitherMode::FloydSteinberg,
-                        DitherMode::Pattern(2),
-                        DitherMode::Pattern(4),
-                        DitherMode::Pattern(8),
+                        DitherMode::Pattern(2, pattern_percent),
+                        DitherMode::Pattern(4, pattern_percent),
+                        DitherMode::Pattern(8, pattern_percent),
                     ][dialoguer::Select::with_theme(&theme)
                         .with_prompt("dithering mode")
                         .items(&[
@@ -313,10 +333,13 @@ async fn main() -> std::io::Result<()> {
                         height,
                         color_mode,
                         dither_mode,
-                        encoder_opts: EncoderOptions {
+                        diff: matches.is_present("diff"),
+                        encoder_opts: PacketFlags {
                             compression_level: Some(3),
                             compression_mode: compression,
+                            is_keyframe: true,
                         },
+                        last_frame: None,
                     },
                     &progress_bars,
                 ));
@@ -364,7 +387,7 @@ async fn main() -> std::io::Result<()> {
                     .build()
                     .unwrap();
 
-                let subtitle_encoder: Box<
+                let mut subtitle_encoder: Box<
                     dyn PacketTransformer<Source = cyanotype::SubtitlePacket>,
                 > = match subtitle_track.format {
                     SubtitleFormat::SubRip => {
@@ -528,17 +551,22 @@ async fn main() -> std::io::Result<()> {
                 .collect::<HashMap<(u32, u32, DitherMode), VideoPacket<RgbImage>>>()
         })
         .flat_map(|frames| {
-            futures::stream::iter(encoders.iter().map(move |encoder| {
-                Ok(encoder
-                    .encode_packet(
-                        &frames[&(
-                            encoder.underlying.width,
-                            encoder.underlying.height,
-                            encoder.underlying.dither_mode,
-                        )],
-                    )
-                    .unwrap())
-            }))
+            futures::stream::iter(
+                encoders
+                    .iter_mut()
+                    .map(move |encoder| {
+                        Ok(encoder
+                            .encode_packet(
+                                &frames[&(
+                                    encoder.underlying.width,
+                                    encoder.underlying.height,
+                                    encoder.underlying.dither_mode,
+                                )],
+                            )
+                            .unwrap())
+                    })
+                    .collect::<Vec<io::Result<EncodedPacket>>>(),
+            )
         });
 
     packet_streams.push(Box::pin(resized_stream));

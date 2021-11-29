@@ -43,29 +43,46 @@ async fn main() -> std::io::Result<()> {
         )
         .arg(
             Arg::with_name("bind")
-                .long("--bind")
+                .long("bind")
                 .takes_value(true)
                 .help("bind a TCP server to specified address instead of outputting to stdout"),
         )
         .arg(
             Arg::with_name("filter_ssa_layers")
-            .long("--ssa-layers")
+            .long("ssa-layers")
             .takes_value(true)
             .multiple(true)
             .help("only shows subtitles on the specified layers, if using a SubStation Alpha stream.")
         )
         .arg(
             Arg::with_name("filter_ssa_styles")
-            .long("--ssa-styles")
+            .long("ssa-styles")
             .takes_value(true)
             .multiple(true)
             .help("only shows subtitles with the specified styles, if using a SubStation Alpha stream.")
+        )
+        .arg(
+            Arg::with_name("diff")
+            .long("diff")
+            .help("use diffing algorithm when optimal")
+        )
+        .arg(
+            Arg::with_name("pattern_percent")
+            .long("dither-percent")
+            .takes_value(true)
+            .help("error calculation % for pattern dithering")
         )
         .get_matches();
 
     ac_ffmpeg::set_log_callback(|_, _| {
         // println!("ffmpeg: {}", m);
     });
+
+    let pattern_percent = if let Some(v) = matches.value_of("pattern_percent") {
+        (v.parse::<f64>().expect("invalid percentage") * 100.0) as u32
+    } else {
+        900
+    };
 
     let mut demuxer = Demuxer::from_url(matches.value_of("INPUT").unwrap()).unwrap();
     demuxer.block_video_streams(true);
@@ -95,9 +112,9 @@ async fn main() -> std::io::Result<()> {
     let dither_mode = if color_mode == ColorMode::EightBit {
         [
             DitherMode::FloydSteinberg,
-            DitherMode::Pattern(2),
-            DitherMode::Pattern(4),
-            DitherMode::Pattern(8),
+            DitherMode::Pattern(2, pattern_percent),
+            DitherMode::Pattern(4, pattern_percent),
+            DitherMode::Pattern(8, pattern_percent),
         ][dialoguer::Select::with_theme(&theme)
             .with_prompt("dithering mode")
             .items(&[
@@ -112,25 +129,28 @@ async fn main() -> std::io::Result<()> {
         DitherMode::None
     };
 
-    let encoder = ANSIVideoEncoder {
+    let mut encoder = ANSIVideoEncoder {
         stream_index: 0,
         width,
         height,
         color_mode,
         dither_mode,
-        encoder_opts: EncoderOptions {
+        diff: matches.is_present("diff"),
+        encoder_opts: PacketFlags {
             compression_level: None,
             compression_mode: CompressionMode::None,
+            is_keyframe: true,
         },
+        last_frame: None,
     };
 
     let mut subtitle_stream_indexes = demuxer
         .subtitle_streams
         .keys()
-        .map(|v| *v)
+        .copied()
         .collect::<Vec<usize>>();
 
-    subtitle_stream_indexes.sort();
+    subtitle_stream_indexes.sort_unstable();
 
     let subtitle_stream_idx = dialoguer::Select::with_theme(&theme)
         .with_prompt("subtitle track")

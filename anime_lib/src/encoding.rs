@@ -13,9 +13,10 @@ use std::time::Duration;
 
 /// Options for the encoder writing this packet into a sink / file.
 #[derive(Copy, Clone, Debug)]
-pub struct EncoderOptions {
+pub struct PacketFlags {
     pub compression_mode: CompressionMode,
     pub compression_level: Option<i32>,
+    pub is_keyframe: bool,
 }
 
 /// The base-level data unit, representing a single frame of video or subtitle data.
@@ -34,7 +35,7 @@ pub struct EncodedPacket {
     /// Packet data
     pub data: Vec<u8>,
     /// Options for the encoder writing this packet into a sink / file.
-    pub encoder_opts: Option<EncoderOptions>,
+    pub encoder_opts: Option<PacketFlags>,
 }
 
 impl EncodedPacket {
@@ -44,7 +45,7 @@ impl EncodedPacket {
         time: Duration,
         duration: Option<Duration>,
         data: Vec<u8>,
-        encoder_opts: Option<EncoderOptions>,
+        encoder_opts: Option<PacketFlags>,
     ) -> EncodedPacket {
         EncodedPacket {
             time,
@@ -110,9 +111,9 @@ impl ProcessorPipeline {
                     imageops::dither(&mut dframe, &LABAnsiColorMap);
                     res.push((*mode, dframe));
                 }
-                &DitherMode::Pattern(size) => {
+                &DitherMode::Pattern(size, multiplier) => {
                     let mut dframe = frame.clone();
-                    pattern::dither(&mut dframe, size);
+                    pattern::dither(&mut dframe, size, multiplier as f32 / 10_000.0);
                     res.push((*mode, dframe));
                 }
                 &DitherMode::None => {
@@ -156,7 +157,7 @@ pub trait AnsiEncoder {
         }
     }
 
-    fn encode_frame(&self, image: &RgbImage) -> (String, u32) {
+    fn encode_frame(&mut self, image: &RgbImage) -> (String, u32) {
         let mut last_upper: Option<Rgb<u8>> = None;
         let mut last_lower: Option<Rgb<u8>> = None;
         let mut instructions = 0;
@@ -182,7 +183,7 @@ pub trait AnsiEncoder {
                 last_upper = Some(*upper);
                 last_lower = Some(*lower);
             }
-            frame += &format!("\x1b[1E");
+            frame += &"\x1b[1E".to_string();
             instructions += 1;
         }
 
@@ -200,7 +201,7 @@ pub trait AnsiEncoder {
 /// A transformer that takes an object and converts it into an [EncodedPacket] if possible; else returning none.
 pub trait PacketTransformer {
     type Source;
-    fn encode_packet(&self, src: &Self::Source) -> Option<EncodedPacket>;
+    fn encode_packet(&mut self, src: &Self::Source) -> Option<EncodedPacket>;
 }
 
 /// A transformer that takes an [EncodedPacket] and converts it into an object if possible; else returning none.

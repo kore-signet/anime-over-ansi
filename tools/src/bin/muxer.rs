@@ -121,16 +121,19 @@ async fn main() -> std::io::Result<()> {
         index: 0,
     };
 
-    let encoder = ANSIVideoEncoder {
+    let mut encoder = ANSIVideoEncoder {
         stream_index: 0,
         width,
         height,
         color_mode,
         dither_mode: DitherMode::None,
-        encoder_opts: EncoderOptions {
+        diff: false,
+        encoder_opts: PacketFlags {
             compression_level: Some(3),
-            compression_mode: compression_mode,
+            compression_mode,
+            is_keyframe: true,
         },
+        last_frame: None,
     };
 
     let mut out_file = tokio::fs::File::create(matches.value_of("OUT").unwrap()).await?;

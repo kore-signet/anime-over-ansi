@@ -6,7 +6,7 @@ use std::fmt;
 pub enum DitherMode {
     None,
     FloydSteinberg,
-    Pattern(usize),
+    Pattern(usize, u32), //matrix size, multiplier
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]

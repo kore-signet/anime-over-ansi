@@ -17,16 +17,15 @@ fn to_luma(c: [u8; 3]) -> f32 {
     (c[0] as f32 * 299.0 + c[1] as f32 * 587.0 + c[2] as f32 * 114.0) / (255.0 * 1000.0)
 }
 
-pub fn mix(color: [u8; 3], size: usize) -> Vec<[u8; 3]> {
-    let multipler: f32 = 0.09;
+pub fn mix(color: [u8; 3], size: usize, multiplier: f32) -> Vec<[u8; 3]> {
     let mut err_acc: [u8; 3] = [0, 0, 0];
     let mut candidates: Vec<[u8; 3]> = Vec::new();
 
     for _ in 0..size {
         let tmp = [
-            (color[0] as f32 + (err_acc[0] as f32 * multipler)).clamp(0.0, 255.0) as u8,
-            (color[1] as f32 + (err_acc[1] as f32 * multipler)).clamp(0.0, 255.0) as u8,
-            (color[2] as f32 + (err_acc[2] as f32 * multipler)).clamp(0.0, 255.0) as u8,
+            (color[0] as f32 + (err_acc[0] as f32 * multiplier)).clamp(0.0, 255.0) as u8,
+            (color[1] as f32 + (err_acc[1] as f32 * multiplier)).clamp(0.0, 255.0) as u8,
+            (color[2] as f32 + (err_acc[2] as f32 * multiplier)).clamp(0.0, 255.0) as u8,
         ];
 
         let chosen = closest_ansi(tmp[0], tmp[1], tmp[2]).0 as usize;
@@ -34,9 +33,9 @@ pub fn mix(color: [u8; 3], size: usize) -> Vec<[u8; 3]> {
         let chosen_c = PALETTE[chosen];
         candidates.push(chosen_c);
 
-        err_acc[0] = err_acc[0].wrapping_add(color[0].wrapping_sub(chosen_c[0]));
-        err_acc[1] = err_acc[1].wrapping_add(color[1].wrapping_sub(chosen_c[1]));
-        err_acc[2] = err_acc[2].wrapping_add(color[2].wrapping_sub(chosen_c[2]));
+        err_acc[0] = err_acc[0].saturating_add(color[0].saturating_sub(chosen_c[0]));
+        err_acc[1] = err_acc[1].saturating_add(color[1].saturating_sub(chosen_c[1]));
+        err_acc[2] = err_acc[2].saturating_add(color[2].saturating_sub(chosen_c[2]));
     }
 
     candidates.sort_by(|a, b| to_luma(*a).partial_cmp(&to_luma(*b)).unwrap());
@@ -44,27 +43,27 @@ pub fn mix(color: [u8; 3], size: usize) -> Vec<[u8; 3]> {
     candidates
 }
 
-pub fn dither(image: &mut RgbImage, matrix_size: usize) {
+pub fn dither(image: &mut RgbImage, matrix_size: usize, multiplier: f32) {
     match matrix_size {
         2 => image
             .enumerate_pixels_mut()
             .par_bridge()
             .for_each(|(x, y, pixel)| {
-                let mixes = mix(pixel.0, 4);
+                let mixes = mix(pixel.0, 4, multiplier);
                 *pixel = Rgb(mixes[BAYER_2X2[(y as usize % 2) * 2 + (x as usize % 2)]]);
             }),
         4 => image
             .enumerate_pixels_mut()
             .par_bridge()
             .for_each(|(x, y, pixel)| {
-                let mixes = mix(pixel.0, 16);
+                let mixes = mix(pixel.0, 16, multiplier);
                 *pixel = Rgb(mixes[BAYER_4X4[(y as usize % 4) * 4 + (x as usize % 4)]]);
             }),
         8 => image
             .enumerate_pixels_mut()
             .par_bridge()
             .for_each(|(x, y, pixel)| {
-                let mixes = mix(pixel.0, 64);
+                let mixes = mix(pixel.0, 64, multiplier);
                 *pixel = Rgb(mixes[BAYER_8X8[(y as usize % 8) * 8 + (x as usize % 8)]]);
             }),
         _ => unimplemented!(),
