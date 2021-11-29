@@ -1,14 +1,15 @@
 use anime_telnet::{
     encoding::PacketDecoder,
     metadata::{SubtitleFormat, VideoMetadata},
+    subtitles::SSAFilter,
 };
-use anime_telnet_encoder::{
+use play::{
+    codec::PacketReadCodec,
     player,
-    subtitles::{SRTDecoder, SSADecoder, SSAFilter},
-    PacketReadCodec,
+    subtitles::{SRTDecoder, SSADecoder, SubtitlePacket},
 };
+
 use clap::Arg;
-use cyanotype::SubtitlePacket;
 use dialoguer::{theme::ColorfulTheme, Select};
 use futures::channel::mpsc;
 use futures::{SinkExt, StreamExt};

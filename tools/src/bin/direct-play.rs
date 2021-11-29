@@ -1,6 +1,7 @@
-use anime_telnet::{encoding::*, metadata::*};
-use anime_telnet_encoder::{player, subtitles::SSAFilter, ANSIVideoEncoder};
+use anime_telnet::{encoding::*, metadata::*, subtitles::SSAFilter};
+use anime_telnet_encoder::ANSIVideoEncoder;
 use clap::Arg;
+use play::{player, subtitles::SubtitlePacket};
 
 use cyanotype::*;
 use std::collections::HashSet;
@@ -178,18 +179,35 @@ async fn main() -> std::io::Result<()> {
                     demuxer
                         .subscribe_to_subtitles(subtitle_stream_indexes[subtitle_stream_idx])
                         .unwrap()
-                        .filter(move |v| {
-                            if let SubtitlePacket::SSAEntry(entry) = v {
-                                futures::future::ready(ssa_filter.check(&entry))
-                            } else {
-                                futures::future::ready(false)
+                        .filter_map(move |v| match v {
+                            cyanotype::SubtitlePacket::SSAEntry(entry) => {
+                                if ssa_filter.check(&entry) {
+                                    futures::future::ready(Some(SubtitlePacket::SSAEntry(entry)))
+                                } else {
+                                    futures::future::ready(None)
+                                }
                             }
-                        }),
+                            cyanotype::SubtitlePacket::SRTEntry(entry) => {
+                                futures::future::ready(Some(SubtitlePacket::SRTEntry(entry)))
+                            }
+                            _ => futures::future::ready(None),
+                        })
+                        .boxed(),
                 )
             } else {
                 demuxer
                     .subscribe_to_subtitles(subtitle_stream_indexes[subtitle_stream_idx])
                     .unwrap()
+                    .filter_map(|v| match v {
+                        cyanotype::SubtitlePacket::SSAEntry(entry) => {
+                            futures::future::ready(Some(SubtitlePacket::SSAEntry(entry)))
+                        }
+                        cyanotype::SubtitlePacket::SRTEntry(entry) => {
+                            futures::future::ready(Some(SubtitlePacket::SRTEntry(entry)))
+                        }
+                        _ => futures::future::ready(None),
+                    })
+                    .boxed()
             }
         } else {
             stream::iter(vec![]).boxed()

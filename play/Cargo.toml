@@ -1,5 +1,5 @@
 [package]
-name = "anime_telnet_encoder"
+name = "play"
 version = "0.1.0"
 edition = "2018"
 
@@ -31,17 +31,8 @@ features = ["io-std","net","time","macros","io-util","fs","rt-multi-thread"]
 version = "0.6.9"
 features = ["codec"]
 
-[dependencies.cyanotype]
-git = "https://github.com/alisww/cyanotype.git"
-
-[dependencies.ac-ffmpeg]
-git = "https://github.com/alisww/rust-ac-ffmpeg.git"
-
 [dependencies.anime_telnet]
 path = "../anime_lib"
-
-[dependencies.play]
-path = "../play"
 
 [dependencies.substation]
 git = "https://github.com/alisww/substation.git"
@@ -52,8 +43,4 @@ git = "https://github.com/alisww/substation.git"
 [dependencies.serde]
 version = "1"
 features = ["derive"]
-
-[[bin]]
-name = "encoder"
-path = "src/bin/encoder.rs"
 

@@ -27,6 +27,8 @@ dependencies = [
  "rayon",
  "serde",
  "simd-adler32",
+ "subrip",
+ "substation",
  "thiserror",
 ]
 
@@ -46,6 +48,7 @@ dependencies = [
  "image",
  "indicatif",
  "lazy_static",
+ "play",
  "rmp-serde",
  "serde",
  "simd-adler32",
@@ -811,6 +814,31 @@ name = "pkg-config"
 version = "0.3.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12295df4f294471248581bc09bef3c38a5e46f1e36d6a37353621a0c6c357e1f"
+
+[[package]]
+name = "play"
+version = "0.1.0"
+dependencies = [
+ "anime_telnet",
+ "async-broadcast",
+ "bytes",
+ "clap",
+ "dialoguer",
+ "fast_image_resize",
+ "futures",
+ "image",
+ "indicatif",
+ "lazy_static",
+ "rmp-serde",
+ "serde",
+ "simd-adler32",
+ "subrip",
+ "substation",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "zstd",
+]
 
 [[package]]
 name = "plotters"

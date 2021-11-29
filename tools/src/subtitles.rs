@@ -1,5 +1,5 @@
 use anime_telnet::{
-    encoding::{EncodedPacket, PacketDecoder, PacketTransformer},
+    encoding::{EncodedPacket, PacketTransformer},
     metadata::SubtitleTrack,
 };
 use cyanotype::streams::SubtitlePacket;
@@ -8,29 +8,7 @@ use std::pin::Pin;
 use tokio::fs;
 use tokio::io::{self, AsyncReadExt};
 
-/// Filters for SSA subtitles.
-#[derive(Default)]
-pub struct SSAFilter {
-    pub layers: Vec<isize>,
-    pub styles: Vec<String>,
-}
-
-impl SSAFilter {
-    pub fn check(&self, entry: &substation::Entry) -> bool {
-        (self.layers.is_empty()
-            || entry
-                .layer
-                .as_ref()
-                .map(|v| self.layers.contains(v))
-                .unwrap_or(false))
-            && (self.styles.is_empty()
-                || entry
-                    .style
-                    .as_ref()
-                    .map(|v| self.styles.contains(v))
-                    .unwrap_or(false))
-    }
-}
+pub use play::subtitles::*;
 
 /// An encoder that transforms SSA subtitle entries into packets.
 pub struct SSAEncoder {
@@ -86,46 +64,6 @@ impl PacketTransformer for SSAEncoder {
     }
 }
 
-/// A decoder that transforms packets into SSA subtitles.
-pub struct SSADecoder {
-    definition_header: Vec<String>,
-    filter: SSAFilter,
-}
-
-impl SSADecoder {
-    pub fn new(definition_header: Vec<String>, filter: Option<SSAFilter>) -> SSADecoder {
-        SSADecoder {
-            definition_header,
-            filter: filter.unwrap_or_default(),
-        }
-    }
-}
-
-impl PacketDecoder for SSADecoder {
-    type Output = SubtitlePacket;
-
-    fn decode_packet(&mut self, src: EncodedPacket) -> Option<Self::Output> {
-        let time = src.time;
-        let end = src.time + src.duration.unwrap();
-
-        substation::parser::subtitle(
-            &String::from_utf8(src.data).unwrap(),
-            &self.definition_header,
-        )
-        .ok()
-        .and_then(|(_, mut entry)| {
-            entry.start = Some(time);
-            entry.end = Some(end);
-
-            if self.filter.check(&entry) {
-                Some(SubtitlePacket::SSAEntry(entry))
-            } else {
-                None
-            }
-        })
-    }
-}
-
 /// An encoder that transforms subrip subtitles into packets.
 pub struct SRTEncoder {
     stream_index: u32,
@@ -152,36 +90,6 @@ impl PacketTransformer for SRTEncoder {
         } else {
             None
         }
-    }
-}
-
-/// A decoder that transforms packets into subrip subtitles.
-pub struct SRTDecoder {
-    idx: u32,
-}
-
-impl SRTDecoder {
-    pub fn new() -> SRTDecoder {
-        SRTDecoder { idx: 0 }
-    }
-}
-
-impl PacketDecoder for SRTDecoder {
-    type Output = SubtitlePacket;
-
-    fn decode_packet(&mut self, src: EncodedPacket) -> Option<Self::Output> {
-        let time = src.time;
-        let end = src.time + src.duration.unwrap();
-        self.idx += 1;
-
-        String::from_utf8(src.data).ok().map(|s| {
-            SubtitlePacket::SRTEntry(subrip::Entry {
-                text: s,
-                start: time,
-                end,
-                index: self.idx,
-            })
-        })
     }
 }
 

@@ -4,4 +4,5 @@ mod err;
 pub mod metadata;
 pub mod palette;
 pub mod pattern;
+pub mod subtitles;
 pub use err::*;

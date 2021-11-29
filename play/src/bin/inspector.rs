@@ -1,6 +1,6 @@
 use anime_telnet::metadata::VideoMetadata;
-use anime_telnet_encoder::PacketReadCodec;
 use futures::StreamExt;
+use play::codec::PacketReadCodec;
 
 use clap::Arg;
 

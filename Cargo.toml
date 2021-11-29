@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "anime_lib",
-    "tools"
+    "tools",
+    "play"
 ]
