@@ -1,4 +1,4 @@
-use anime_telnet::{encoding::*, metadata::*};
+use anime_telnet::{encoding::*, metadata::*, palette::AnsiColorMap};
 use anime_telnet_encoder::{
     subtitles, ANSIVideoEncoder, PacketWriteCodec as PacketCodec, SpinnyANSIVideoEncoder,
 };
@@ -175,16 +175,24 @@ async fn main() -> std::io::Result<()> {
                 })
                 .unwrap_or(ColorMode::EightBit);
 
+            let color_mapping = one_of_keys(&mut map, vec!["colormapping", "deltae", "cie"])
+                .map(|c| match c.as_str() {
+                    "76" | "cie76" => AnsiColorMap::CIE76,
+                    "94" | "cie94" => AnsiColorMap::CIE94,
+                    _ => panic!("invalid color mode: possible ones are '76' and '94'"),
+                })
+                .unwrap_or(AnsiColorMap::CIE76);
+
             let dither_mode = if color_mode == ColorMode::EightBit {
                 one_of_keys(&mut map, vec!["dither", "dithering", "dithering-mode"])
                     .map(|c| match c.as_str() {
-                        "floyd-steinberg" | "error-diffusion" => DitherMode::FloydSteinberg,
-                        "ordered-2x2" => DitherMode::Pattern(2, pattern_percent),
-                        "ordered-4x4" => DitherMode::Pattern(4, pattern_percent),
-                        "ordered-8x8" => DitherMode::Pattern(8, pattern_percent),
+                        "floyd-steinberg" | "error-diffusion" => DitherMode::FloydSteinberg(color_mapping),
+                        "ordered-2x2" => DitherMode::Pattern(color_mapping, 2, pattern_percent),
+                        "ordered-4x4" => DitherMode::Pattern(color_mapping, 4, pattern_percent),
+                        "ordered-8x8" => DitherMode::Pattern(color_mapping, 8, pattern_percent),
                         _ => panic!("invalid dithering mode: possible ones are 'floyd-steinberg', 'ordered-2x2', 'ordered-4x4', 'ordered-8x8'")
                     })
-                    .unwrap_or(DitherMode::FloydSteinberg)
+                    .unwrap_or(DitherMode::FloydSteinberg(color_mapping))
             } else {
                 DitherMode::None
             };
@@ -293,12 +301,27 @@ async fn main() -> std::io::Result<()> {
                     _ => panic!(),
                 };
 
+                let color_mapping = match dialoguer::Select::with_theme(&theme)
+                    .with_prompt("color mapping equation")
+                    .items(&[
+                        "DeltaE76 (fastest)",
+                        "DeltaE94 (slower, may be more accurate)",
+                    ])
+                    .default(0)
+                    .interact()
+                    .unwrap()
+                {
+                    0 => AnsiColorMap::CIE76,
+                    1 => AnsiColorMap::CIE94,
+                    _ => panic!(),
+                };
+
                 let dither_mode = if color_mode == ColorMode::EightBit {
                     [
-                        DitherMode::FloydSteinberg,
-                        DitherMode::Pattern(2, pattern_percent),
-                        DitherMode::Pattern(4, pattern_percent),
-                        DitherMode::Pattern(8, pattern_percent),
+                        DitherMode::FloydSteinberg(color_mapping),
+                        DitherMode::Pattern(color_mapping, 2, pattern_percent),
+                        DitherMode::Pattern(color_mapping, 4, pattern_percent),
+                        DitherMode::Pattern(color_mapping, 8, pattern_percent),
                     ][dialoguer::Select::with_theme(&theme)
                         .with_prompt("dithering mode")
                         .items(&[

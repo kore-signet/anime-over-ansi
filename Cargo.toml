@@ -4,3 +4,6 @@ members = [
     "tools",
     "play"
 ]
+
+[profile.release]
+debug = true

@@ -1,4 +1,4 @@
-use anime_telnet::{encoding::*, metadata::*, subtitles::SSAFilter};
+use anime_telnet::{encoding::*, metadata::*, palette::AnsiColorMap, subtitles::SSAFilter};
 use anime_telnet_encoder::ANSIVideoEncoder;
 use clap::Arg;
 use play::{player, subtitles::SubtitlePacket};
@@ -108,13 +108,27 @@ async fn main() -> std::io::Result<()> {
         1 => ColorMode::True,
         _ => panic!(),
     };
+    let color_mapping = match dialoguer::Select::with_theme(&theme)
+        .with_prompt("color mapping equation")
+        .items(&[
+            "DeltaE76 (fastest)",
+            "DeltaE94 (slower, may be more accurate)",
+        ])
+        .default(0)
+        .interact()
+        .unwrap()
+    {
+        0 => AnsiColorMap::CIE76,
+        1 => AnsiColorMap::CIE94,
+        _ => panic!(),
+    };
 
     let dither_mode = if color_mode == ColorMode::EightBit {
         [
-            DitherMode::FloydSteinberg,
-            DitherMode::Pattern(2, pattern_percent),
-            DitherMode::Pattern(4, pattern_percent),
-            DitherMode::Pattern(8, pattern_percent),
+            DitherMode::FloydSteinberg(color_mapping),
+            DitherMode::Pattern(color_mapping, 2, pattern_percent),
+            DitherMode::Pattern(color_mapping, 4, pattern_percent),
+            DitherMode::Pattern(color_mapping, 8, pattern_percent),
         ][dialoguer::Select::with_theme(&theme)
             .with_prompt("dithering mode")
             .items(&[

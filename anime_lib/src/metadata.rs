@@ -1,3 +1,4 @@
+use crate::palette::AnsiColorMap;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -5,8 +6,8 @@ use std::fmt;
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum DitherMode {
     None,
-    FloydSteinberg,
-    Pattern(usize, u32), //matrix size, multiplier
+    FloydSteinberg(AnsiColorMap),
+    Pattern(AnsiColorMap, usize, u32), //matrix size, multiplier
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]

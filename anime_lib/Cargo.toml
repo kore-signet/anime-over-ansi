@@ -24,6 +24,7 @@ git = "https://github.com/alisww/argmm"
 [dependencies.image]
 version = "0.23.14"
 default-features = false
+features = ["png"]
 
 [dependencies.serde]
 version = "1"
@@ -34,5 +35,9 @@ criterion = { version = "0.3.5", features = ["html_reports"] }
 rand = "0.8.4"
 
 [[bench]]
-name = "delta_e"
+name = "cie76_delta_e"
+harness = false
+
+[[bench]]
+name = "cie94_delta_e"
 harness = false

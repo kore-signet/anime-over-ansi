@@ -1,7 +1,7 @@
 //! Thomas Knoll dithering algorithm, based on https://bisqwit.iki.fi/story/howto/dither/jy/#PatternDitheringThePatentedAlgorithmUsedInAdobePhotoshop
 
-use crate::color_calc::closest_ansi;
-use crate::palette::PALETTE;
+use crate::palette::{AnsiColorMap, PALETTE};
+use image::imageops::ColorMap;
 use image::{Rgb, RgbImage};
 use rayon::prelude::*;
 
@@ -17,7 +17,7 @@ fn to_luma(c: [u8; 3]) -> f32 {
     (c[0] as f32 * 299.0 + c[1] as f32 * 587.0 + c[2] as f32 * 114.0) / (255.0 * 1000.0)
 }
 
-pub fn mix(color: [u8; 3], size: usize, multiplier: f32) -> Vec<[u8; 3]> {
+pub fn mix(color: [u8; 3], size: usize, multiplier: f32, color_map: AnsiColorMap) -> Vec<[u8; 3]> {
     let mut err_acc: [u8; 3] = [0, 0, 0];
     let mut candidates: Vec<[u8; 3]> = Vec::new();
 
@@ -28,7 +28,7 @@ pub fn mix(color: [u8; 3], size: usize, multiplier: f32) -> Vec<[u8; 3]> {
             (color[2] as f32 + (err_acc[2] as f32 * multiplier)).clamp(0.0, 255.0) as u8,
         ];
 
-        let chosen = closest_ansi(tmp[0], tmp[1], tmp[2]).0 as usize;
+        let chosen = color_map.index_of(&Rgb(tmp));
 
         let chosen_c = PALETTE[chosen];
         candidates.push(chosen_c);
@@ -43,27 +43,27 @@ pub fn mix(color: [u8; 3], size: usize, multiplier: f32) -> Vec<[u8; 3]> {
     candidates
 }
 
-pub fn dither(image: &mut RgbImage, matrix_size: usize, multiplier: f32) {
+pub fn dither(image: &mut RgbImage, matrix_size: usize, multiplier: f32, color_map: AnsiColorMap) {
     match matrix_size {
         2 => image
             .enumerate_pixels_mut()
             .par_bridge()
             .for_each(|(x, y, pixel)| {
-                let mixes = mix(pixel.0, 4, multiplier);
+                let mixes = mix(pixel.0, 4, multiplier, color_map);
                 *pixel = Rgb(mixes[BAYER_2X2[(y as usize % 2) * 2 + (x as usize % 2)]]);
             }),
         4 => image
             .enumerate_pixels_mut()
             .par_bridge()
             .for_each(|(x, y, pixel)| {
-                let mixes = mix(pixel.0, 16, multiplier);
+                let mixes = mix(pixel.0, 16, multiplier, color_map);
                 *pixel = Rgb(mixes[BAYER_4X4[(y as usize % 4) * 4 + (x as usize % 4)]]);
             }),
         8 => image
             .enumerate_pixels_mut()
             .par_bridge()
             .for_each(|(x, y, pixel)| {
-                let mixes = mix(pixel.0, 64, multiplier);
+                let mixes = mix(pixel.0, 64, multiplier, color_map);
                 *pixel = Rgb(mixes[BAYER_8X8[(y as usize % 8) * 8 + (x as usize % 8)]]);
             }),
         _ => unimplemented!(),

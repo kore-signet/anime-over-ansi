@@ -1,4 +1,4 @@
-use anime_telnet::color_calc::{closest_ansi_avx, closest_ansi_scalar, closest_ansi_sse};
+use anime_telnet::color_calc::cie76::{closest_ansi_avx, closest_ansi_scalar, closest_ansi_sse};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
 use std::time::Duration;
@@ -6,16 +6,16 @@ use std::time::Duration;
 fn delta_e(c: &mut Criterion) {
     let mut group = c.benchmark_group("delta E");
     let mut rng = rand::thread_rng();
-    let (r, g, b) = (rng.gen::<u8>(), rng.gen::<u8>(), rng.gen::<u8>());
+    let rgb = [rng.gen::<u8>(), rng.gen::<u8>(), rng.gen::<u8>()];
 
     group.bench_function("scalar", |bench| {
-        bench.iter(|| black_box(closest_ansi_scalar(r, g, b)))
+        bench.iter(|| black_box(closest_ansi_scalar(&rgb)))
     });
     group.bench_function("sse (128bit)", |bench| {
-        bench.iter(|| black_box(unsafe { closest_ansi_sse(r, g, b) }))
+        bench.iter(|| black_box(unsafe { closest_ansi_sse(&rgb) }))
     });
     group.bench_function("avx (256bit)", |bench| {
-        bench.iter(|| black_box(unsafe { closest_ansi_avx(r, g, b) }))
+        bench.iter(|| black_box(unsafe { closest_ansi_avx(&rgb) }))
     });
 
     group.finish();

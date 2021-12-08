@@ -1,5 +1,7 @@
-use super::color_calc::closest_ansi;
+use super::color_calc;
+use lab::Lab;
 use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // TODO: configurable palettes
@@ -272,17 +274,49 @@ lazy_static! {
         }
         pal
     };
+
+    /// Static ansi256 palette in LAB format, converted from RGB.
+    pub static ref LAB_PALETTE: [(f32, f32, f32); 256] = {
+        let mut pal = [(0.0f32,0.0f32,0.0f32); 256];
+        for i in 0..256 {
+            let lab = Lab::from_rgb(&PALETTE[i]);
+            pal[i] = (lab.l, lab.a, lab.b)
+        }
+
+        pal
+    };
+
+    /// Static ansi256 palette in LAB format, converted from RGB. Flattened from tuple representation and with an extra zero added for easier handling with SIMD intrinsics.
+    pub static ref LAB_PALETTE_FLATTENED: [f32; 1024] = {
+        let mut pal = [0.0f32; 1024];
+        for i in 0..256 {
+            let lab = Lab::from_rgb(&PALETTE[i]);
+            pal[i * 4] = lab.l;
+            pal[i * 4 + 1] = lab.a;
+            pal[i * 4 + 2] = lab.b;
+            pal[i * 4 + 3] = 0.0;
+        }
+
+        pal
+    };
 }
 
 use image::{imageops::ColorMap, Rgb};
 
-pub struct LABAnsiColorMap;
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub enum AnsiColorMap {
+    CIE76,
+    CIE94,
+}
 
-impl ColorMap for LABAnsiColorMap {
+impl ColorMap for AnsiColorMap {
     type Color = Rgb<u8>;
 
     fn index_of(&self, color: &Rgb<u8>) -> usize {
-        closest_ansi(color[0], color[1], color[2]).0 as usize
+        match self {
+            AnsiColorMap::CIE76 => color_calc::cie76::closest_ansi(&color.0).0 as usize,
+            AnsiColorMap::CIE94 => color_calc::cie94::closest_ansi(&color.0).0 as usize,
+        }
     }
 
     fn lookup(&self, idx: usize) -> Option<Self::Color> {

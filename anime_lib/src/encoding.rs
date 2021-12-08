@@ -1,6 +1,6 @@
 use super::{
     metadata::{ColorMode, CompressionMode, DitherMode},
-    palette::{LABAnsiColorMap, REVERSE_PALETTE},
+    palette::REVERSE_PALETTE,
     pattern,
 };
 use fast_image_resize as fr;
@@ -106,14 +106,14 @@ impl ProcessorPipeline {
 
         for mode in &self.dither_modes {
             match mode {
-                &DitherMode::FloydSteinberg => {
+                &DitherMode::FloydSteinberg(map) => {
                     let mut dframe = frame.clone();
-                    imageops::dither(&mut dframe, &LABAnsiColorMap);
+                    imageops::dither(&mut dframe, &map);
                     res.push((*mode, dframe));
                 }
-                &DitherMode::Pattern(size, multiplier) => {
+                &DitherMode::Pattern(map, size, multiplier) => {
                     let mut dframe = frame.clone();
-                    pattern::dither(&mut dframe, size, multiplier as f32 / 10_000.0);
+                    pattern::dither(&mut dframe, size, multiplier as f32 / 10_000.0, map);
                     res.push((*mode, dframe));
                 }
                 &DitherMode::None => {
