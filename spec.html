@@ -199,13 +199,6 @@
         <tr>
           <td>index</td>
           <td>the stream index, which is encoded into every packet. does not necessarily correspond to the track's index in subtitle_tracks.</td>
-        <tr>
-          <td>presentation timestamp (ns)</td>
-          <td>64bit unsigned int</td>
-        </tr>
-        <tr>
-          <td>duration (ns)</td>
-          <td>64bit unsigned int</td>
         </tr>
       </tbody>
     </table>
@@ -236,7 +229,7 @@
           <td>8bit unsigned int</td>
         </tr>
         <tr>
-          <td>uncompressed size (only if data is compressed)</td>
+          <td>uncompressed size (only present if data is compressed)</td>
           <td>64bit unsigned int</td>
         </tr>
         <tr>
@@ -273,7 +266,7 @@
   <h4 class="heading">2.2.2 SSA/ASS packets</h4>
   <p>
     if the packet belongs to a SubStationAlpha subtitle track, the data will be a utf-8 encoded SSA entry, stored as in the <a href="https://www.matroska.org/technical/subtitles.html#ssaass-subtitles">Matroska container</a>: in the format 'ReadOrder, Layer, Style, Name, MarginL, MarginR, MarginV, Effect, Text'.<br/><br/>
-    the start of the subtitle is used to set the presentation timestamp, and the end of the subtitle is used to set the subtitle duration.
+    the start of the subtitle is used to set the presentation timestamp, and the end of the subtitle is used to set the packet duration.
   </p>
 </body>
 </html>
