@@ -27,6 +27,7 @@ dependencies = [
  "derive_builder",
  "fast_image_resize",
  "image",
+ "kasi-kule",
  "lab",
  "lazy_static",
  "rand",
@@ -655,6 +656,12 @@ checksum = "7cc9ffccd38c451a86bf13657df244e9c3f37493cce8e5e21e940963777acc84"
 dependencies = [
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "kasi-kule"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32527463e583e7854b417c7019f4a4174ffd258bd2b52c0850eaa28604544d21"
 
 [[package]]
 name = "lab"

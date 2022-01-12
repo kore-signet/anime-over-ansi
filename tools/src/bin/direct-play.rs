@@ -111,15 +111,17 @@ async fn main() -> std::io::Result<()> {
     let color_mapping = match dialoguer::Select::with_theme(&theme)
         .with_prompt("color mapping equation")
         .items(&[
-            "DeltaE76 (fastest)",
-            "DeltaE94 (slower, may be more accurate)",
+            "CAM02 (best, pretty fast)",
+            "DeltaE76 (fastest, has issues with blues and purples)",
+            "DeltaE94 (slower, may be more accurate but still has issues)",
         ])
         .default(0)
         .interact()
         .unwrap()
     {
-        0 => AnsiColorMap::CIE76,
-        1 => AnsiColorMap::CIE94,
+        0 => AnsiColorMap::CAM02,
+        1 => AnsiColorMap::CIE76,
+        2 => AnsiColorMap::CIE94,
         _ => panic!(),
     };
 

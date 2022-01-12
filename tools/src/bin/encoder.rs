@@ -177,11 +177,12 @@ async fn main() -> std::io::Result<()> {
 
             let color_mapping = one_of_keys(&mut map, vec!["colormapping", "deltae", "cie"])
                 .map(|c| match c.as_str() {
+                    "cam02" | "jab" => AnsiColorMap::CAM02,
                     "76" | "cie76" => AnsiColorMap::CIE76,
                     "94" | "cie94" => AnsiColorMap::CIE94,
-                    _ => panic!("invalid color mode: possible ones are '76' and '94'"),
+                    _ => panic!("invalid color mode: possible ones are 'cam02', '76' and '94'"),
                 })
-                .unwrap_or(AnsiColorMap::CIE76);
+                .unwrap_or(AnsiColorMap::CAM02);
 
             let dither_mode = if color_mode == ColorMode::EightBit {
                 one_of_keys(&mut map, vec!["dither", "dithering", "dithering-mode"])
@@ -304,15 +305,17 @@ async fn main() -> std::io::Result<()> {
                 let color_mapping = match dialoguer::Select::with_theme(&theme)
                     .with_prompt("color mapping equation")
                     .items(&[
-                        "DeltaE76 (fastest)",
-                        "DeltaE94 (slower, may be more accurate)",
+                        "CAM02 (best, pretty fast)",
+                        "DeltaE76 (fastest, has issues with blues and purples)",
+                        "DeltaE94 (slower, may be more accurate but still has issues)",
                     ])
                     .default(0)
                     .interact()
                     .unwrap()
                 {
-                    0 => AnsiColorMap::CIE76,
-                    1 => AnsiColorMap::CIE94,
+                    0 => AnsiColorMap::CAM02,
+                    1 => AnsiColorMap::CIE76,
+                    2 => AnsiColorMap::CIE94,
                     _ => panic!(),
                 };
 

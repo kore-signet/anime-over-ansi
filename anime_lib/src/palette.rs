@@ -1,4 +1,5 @@
 use super::color_calc;
+use kasi_kule::{Jab, UCS};
 use lab::Lab;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
@@ -299,12 +300,36 @@ lazy_static! {
 
         pal
     };
+
+    pub static ref JAB_PALETTE: [(f32, f32, f32); 256] = {
+        let mut pal = [(0.0f32,0.0f32,0.0f32); 256];
+        for i in 0..256 {
+            let jab = Jab::<UCS>::from(PALETTE[i]);
+            pal[i] = (jab.J, jab.a, jab.b)
+        }
+
+        pal
+    };
+
+    pub static ref JAB_PALETTE_FLATTENED: [f32; 1024] = {
+        let mut pal = [0.0f32; 1024];
+        for i in 0..256 {
+            let jab = Jab::<UCS>::from(PALETTE[i]);
+            pal[i * 4] = jab.J;
+            pal[i * 4 + 1] = jab.a;
+            pal[i * 4 + 2] = jab.b;
+            pal[i * 4 + 3] = 0.0;
+        }
+
+        pal
+    };
 }
 
 use image::{imageops::ColorMap, Rgb};
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum AnsiColorMap {
+    CAM02,
     CIE76,
     CIE94,
 }
@@ -314,6 +339,7 @@ impl ColorMap for AnsiColorMap {
 
     fn index_of(&self, color: &Rgb<u8>) -> usize {
         match self {
+            AnsiColorMap::CAM02 => color_calc::jab::closest_ansi(&color.0).0 as usize,
             AnsiColorMap::CIE76 => color_calc::cie76::closest_ansi(&color.0).0 as usize,
             AnsiColorMap::CIE94 => color_calc::cie94::closest_ansi(&color.0).0 as usize,
         }

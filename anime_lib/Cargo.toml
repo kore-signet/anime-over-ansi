@@ -11,6 +11,7 @@ derive_builder = "0.10.2"
 simd-adler32 = "0.3.4"
 thiserror = "1"
 rayon = "1.5.1"
+kasi-kule = "0.3"
 
 [dependencies.substation]
 git = "https://github.com/alisww/substation.git"
