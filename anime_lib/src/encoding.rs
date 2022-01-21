@@ -199,7 +199,7 @@ pub trait AnsiEncoder {
 }
 
 /// A transformer that takes an object and converts it into an [EncodedPacket] if possible; else returning none.
-pub trait PacketTransformer {
+pub trait PacketTransformer<'a> {
     type Source;
     fn encode_packet(&mut self, src: &Self::Source) -> Option<EncodedPacket>;
 }

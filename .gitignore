@@ -8,3 +8,6 @@ test.rs
 *.png
 *.mkv
 blue-noise/
+*.sf2
+*.m4v
+*.mid

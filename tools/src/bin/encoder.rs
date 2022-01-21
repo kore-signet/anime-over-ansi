@@ -140,7 +140,20 @@ async fn main() -> std::io::Result<()> {
                 .takes_value(true)
                 .help("error calculation % for pattern dithering"),
         )
+        .arg(
+            Arg::with_name("midi_files")
+                .long("midis")
+                .takes_value(true)
+                .multiple(true),
+        )
         .get_matches();
+
+    let midi_attachments = matches
+        .values_of("midi_files")
+        .unwrap_or_default()
+        .into_iter()
+        .map(|midi| Attachment::Midi(std::fs::read(midi).unwrap()))
+        .collect();
 
     let pattern_percent = if let Some(v) = matches.value_of("pattern_percent") {
         ((v.parse::<f64>().expect("invalid percentage")) * 100.0) as u32
@@ -528,6 +541,7 @@ async fn main() -> std::io::Result<()> {
 
     let mut out_file = tokio::fs::File::create(matches.value_of("OUT").unwrap()).await?;
     let metadata_bytes = rmps::to_vec(&VideoMetadata {
+        attachments: midi_attachments,
         video_tracks,
         subtitle_tracks,
     })

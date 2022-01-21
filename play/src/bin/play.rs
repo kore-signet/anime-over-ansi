@@ -1,6 +1,6 @@
 use anime_telnet::{
     encoding::PacketDecoder,
-    metadata::{SubtitleFormat, VideoMetadata},
+    metadata::{SubtitleFormat, VideoMetadata, Attachment},
     subtitles::SSAFilter,
 };
 use play::{
@@ -14,6 +14,10 @@ use dialoguer::{theme::ColorfulTheme, Select};
 use futures::channel::mpsc;
 use futures::{SinkExt, StreamExt};
 use rmp_serde as rmps;
+use rodio::{OutputStream, Sink};
+use synthrs::midi;
+use synthrs::synthesizer::{make_samples_from_midi, peak_normalize, quantize_samples};
+use synthrs::wave;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpListener;
 use tokio::task::{self, JoinHandle};
@@ -72,6 +76,21 @@ async fn main() -> std::io::Result<()> {
     let mut metadata_bytes = vec![0; metadata_len as usize];
     input_fs.read_exact(&mut metadata_bytes).await?;
     let mut metadata: VideoMetadata = rmps::from_read_ref(&metadata_bytes).unwrap();
+
+    let audio_samples: Vec<Vec<i16>> = metadata
+        .attachments
+        .iter()
+        .filter_map(|v| {
+            if let Attachment::Midi(bytes) = v {
+                let mut cursor = std::io::Cursor::new(bytes);
+                let track = midi::read_midi(&mut cursor).unwrap();
+                let samples = make_samples_from_midi(wave::sine_wave, 44_100, true, track).unwrap();
+                Some(quantize_samples::<i16>(&peak_normalize(&samples)))
+            } else {
+                None
+            }
+        })
+        .collect();
 
     let video_selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("choose video track")
@@ -215,6 +234,16 @@ async fn main() -> std::io::Result<()> {
                 Ok(())
             })
         };
+
+    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+    let sink = Sink::try_new(&stream_handle).unwrap();
+    sink.pause();
+    for track in audio_samples {
+        let buffer = rodio::buffer::SamplesBuffer::new(1, 44_100, track);
+        sink.append(buffer);
+    }
+
+    sink.play();
 
     let runner = task::spawn(player::play(Box::pin(vrx), Box::pin(srx), otx));
 

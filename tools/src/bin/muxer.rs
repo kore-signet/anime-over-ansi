@@ -138,6 +138,7 @@ async fn main() -> std::io::Result<()> {
 
     let mut out_file = tokio::fs::File::create(matches.value_of("OUT").unwrap()).await?;
     let metadata_bytes = rmps::to_vec(&VideoMetadata {
+        attachments: Vec::new(),
         video_tracks: vec![track],
         subtitle_tracks: vec![],
     })
