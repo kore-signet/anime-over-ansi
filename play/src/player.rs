@@ -1,68 +1,104 @@
 use crate::subtitles::SubtitlePacket;
 use anime_telnet::encoding::EncodedPacket;
 
-use async_broadcast::Sender;
+use async_broadcast::{Receiver, Sender};
 use futures::stream::{Stream, StreamExt};
 use std::collections::VecDeque;
-use std::pin::Pin;
+use tokio::io::{self, AsyncWriteExt, BufWriter};
+use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::time::{sleep, Instant};
 
 /// Plays video into a broadcast channel, timing each frame.
-pub async fn play(
-    mut video_stream: Pin<Box<dyn Stream<Item = EncodedPacket> + Send>>,
-    mut subtitle_stream: Pin<Box<dyn Stream<Item = SubtitlePacket> + Send>>,
+pub async fn play<T, S>(
+    mut video_stream: T,
+    mut subtitle_stream: S,
     output: Sender<Vec<u8>>,
-) -> Result<(), async_broadcast::SendError<Vec<u8>>> {
-    let mut subtitle_buffer = VecDeque::new();
+) -> Result<(), async_broadcast::SendError<Vec<u8>>>
+where
+    T: Stream<Item = EncodedPacket> + Send + Unpin,
+    S: Stream<Item = SubtitlePacket> + Send + Unpin,
+{
+    let mut subtitle_buffer: VecDeque<SubtitlePacket> = VecDeque::new();
     let play_start = Instant::now();
+
     loop {
         tokio::select! {
-            Some(video_frame) = video_stream.next() => {
-                subtitle_buffer.retain(|v| {
-                    if let SubtitlePacket::SRTEntry(e) = v {
-                        e.end >= video_frame.time
-                    } else if let SubtitlePacket::SSAEntry(e) = v {
-                        e.end.unwrap() >= video_frame.time
-                    } else {
-                        false
-                    }
-                });
-
-
+            Some(mut video_frame) = video_stream.next() => {
+                subtitle_buffer.retain(|v| v.end >= video_frame.time);
 
                 if let Some(duration) = video_frame.time.checked_sub(play_start.elapsed()) {
                     sleep(duration).await;
                 }
 
                // clean term; send frame; clear ansi styling
-                output.broadcast(b"\x1B[1;1H".to_vec()).await?;
-                output.broadcast(video_frame.data).await?;
-                output.broadcast(b"\x1B[0m".to_vec()).await?;
+                let mut frame: Vec<u8> = Vec::new();
+                frame.extend(b"\x1B[1;1H");
+                frame.append(&mut video_frame.data);
+                frame.extend(b"\x1B[0m");
 
                 // show subtitle if available
-                if let Some(SubtitlePacket::SRTEntry(e)) = subtitle_buffer.front() {
-                    if e.start <= video_frame.time {
-                        output.broadcast(b"\x1B[2K ".to_vec()).await?;
-                        output.broadcast(e.text.clone().into_bytes()).await?;
-                    }
-                } else if let Some(SubtitlePacket::SSAEntry(e)) = subtitle_buffer.front() {
-                    if e.start.unwrap() <= video_frame.time {
-                        output.broadcast(b"\x1B[2K ".to_vec()).await?;
-                        let s = substation::parser::text_line(&e.text).unwrap().1.into_iter().filter_map(|v| {
-                            if let substation::TextSection::Text(s) = v {
-                                Some(s)
-                            } else {
-                                None
-                            }
-                        }).collect::<Vec<String>>().join("").replace("\\N","").into_bytes();
-                        output.broadcast(s).await?;
+                if let Some(SubtitlePacket { start, payload, .. }) = subtitle_buffer.front() {
+                    if start <= &video_frame.time {
+                        frame.extend(payload);
                     }
                 } else {
-                    output.broadcast(b"\x1B[2K ".to_vec()).await?;
+                    frame.extend(b"\x1B[2K ");
                 }
+
+                output.broadcast(frame).await?;
             },
             Some(subtitle_chunk) = subtitle_stream.next() => {
                 subtitle_buffer.push_back(subtitle_chunk);
+            },
+            else => break
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn play_to_stdout(mut orx: Receiver<Vec<u8>>) -> io::Result<()> {
+    let _cleanup = crate::TerminalCleanup;
+    print!("\x1b[?25l\x1B[2J\x1B[1;1H");
+
+    let mut stdout = io::stdout();
+    while let Some(val) = orx.next().await {
+        stdout.write_all(&val).await?;
+    }
+
+    Ok(())
+}
+
+pub async fn play_to_tcp(mut orx: Receiver<Vec<u8>>, addr: impl ToSocketAddrs) -> io::Result<()> {
+    let listener = TcpListener::bind(addr).await?;
+    let mut sockets = Vec::new();
+    let mut to_rm = Vec::new();
+
+    loop {
+        tokio::select! {
+            Ok((mut socket,addr)) = listener.accept() => {
+                if socket.write_all(b"\x1B[2J\x1B[1;1H").await.is_ok() {
+                    sockets.push(BufWriter::new(socket));
+                    eprintln!("got new connection from {}", addr);
+                    eprintln!("total connections: {}", sockets.len());
+                };
+            },
+            Ok(msg) = orx.recv() => {
+                if !to_rm.is_empty() {
+                    eprintln!("disconnecting {} broken socket(s)", to_rm.len());
+                }
+
+                for i in to_rm.drain(..) {
+                    if let Err(e) = sockets.remove(i).into_inner().shutdown().await {
+                        eprintln!("error shutting down socket: {}",e);
+                    };
+                }
+
+                for (i,socket) in sockets.iter_mut().enumerate() {
+                    if socket.write_all(&msg).await.is_err() {
+                        to_rm.push(i);
+                    };
+                }
             },
             else => break
         }

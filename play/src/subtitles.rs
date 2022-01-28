@@ -1,9 +1,11 @@
 use anime_telnet::encoding::{EncodedPacket, PacketDecoder};
 use anime_telnet::subtitles::SSAFilter;
+use std::time::Duration;
 
-pub enum SubtitlePacket {
-    SSAEntry(substation::Entry),
-    SRTEntry(subrip::Entry),
+pub struct SubtitlePacket {
+    pub start: Duration,
+    pub end: Duration,
+    pub payload: Vec<u8>,
 }
 
 /// A decoder that transforms packets into SSA subtitles.
@@ -38,24 +40,16 @@ impl PacketDecoder for SSADecoder {
             entry.end = Some(end);
 
             if self.filter.check(&entry) {
-                Some(SubtitlePacket::SSAEntry(entry))
-            } else {
-                None
+                return render_ssa(entry);
             }
+
+            None
         })
     }
 }
 
 /// A decoder that transforms packets into subrip subtitles.
-pub struct SRTDecoder {
-    idx: u32,
-}
-
-impl SRTDecoder {
-    pub fn new() -> SRTDecoder {
-        SRTDecoder { idx: 0 }
-    }
-}
+pub struct SRTDecoder;
 
 impl PacketDecoder for SRTDecoder {
     type Output = SubtitlePacket;
@@ -63,15 +57,44 @@ impl PacketDecoder for SRTDecoder {
     fn decode_packet(&mut self, src: EncodedPacket) -> Option<Self::Output> {
         let time = src.time;
         let end = src.time + src.duration.unwrap();
-        self.idx += 1;
-
-        String::from_utf8(src.data).ok().map(|s| {
-            SubtitlePacket::SRTEntry(subrip::Entry {
-                text: s,
-                start: time,
-                end,
-                index: self.idx,
-            })
-        })
+        String::from_utf8(src.data)
+            .ok()
+            .map(|s| render_srt(time, end, s))
     }
+}
+
+pub fn render_srt(start: Duration, end: Duration, text: String) -> SubtitlePacket {
+    SubtitlePacket {
+        payload: format!("\x1B[2K {}", text).into_bytes(),
+        start,
+        end,
+    }
+}
+
+pub fn render_ssa(entry: substation::Entry) -> Option<SubtitlePacket> {
+    substation::parser::text_line(&entry.text)
+        .ok()
+        .map(|(_, text)| {
+            let bytes = [
+                b"\x1B[2K ".to_vec(),
+                text.into_iter()
+                    .filter_map(|v| {
+                        if let substation::TextSection::Text(s) = v {
+                            Some(s)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<String>>()
+                    .join("")
+                    .replace("\\N", "")
+                    .into_bytes(),
+            ]
+            .concat();
+            SubtitlePacket {
+                start: entry.start.unwrap(),
+                end: entry.end.unwrap(),
+                payload: bytes,
+            }
+        })
 }

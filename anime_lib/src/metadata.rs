@@ -102,8 +102,16 @@ pub struct SubtitleTrack {
     pub index: u32,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Attachment {
+    Binary(Vec<u8>),
+    Midi(Vec<u8>),
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct VideoMetadata {
     pub video_tracks: Vec<VideoTrack>,
     pub subtitle_tracks: Vec<SubtitleTrack>,
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
 }

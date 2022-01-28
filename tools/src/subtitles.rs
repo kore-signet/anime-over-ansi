@@ -25,7 +25,7 @@ impl SSAEncoder {
     }
 }
 
-impl PacketTransformer for SSAEncoder {
+impl PacketTransformer<'_> for SSAEncoder {
     type Source = SubtitlePacket;
 
     fn encode_packet(&mut self, src: &Self::Source) -> Option<EncodedPacket> {
@@ -75,7 +75,7 @@ impl SRTEncoder {
     }
 }
 
-impl PacketTransformer for SRTEncoder {
+impl PacketTransformer<'_> for SRTEncoder {
     type Source = SubtitlePacket;
 
     fn encode_packet(&mut self, src: &Self::Source) -> Option<EncodedPacket> {
@@ -104,7 +104,7 @@ impl PassthroughSubtitleEncoder {
     }
 }
 
-impl PacketTransformer for PassthroughSubtitleEncoder {
+impl PacketTransformer<'_> for PassthroughSubtitleEncoder {
     type Source = SubtitlePacket;
 
     fn encode_packet(&mut self, src: &Self::Source) -> Option<EncodedPacket> {

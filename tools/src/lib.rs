@@ -1,5 +1,6 @@
 mod codec;
 pub use codec::*;
+// pub mod midi;
 pub mod subtitles;
 
 use anime_telnet::encoding::{AnsiEncoder, EncodedPacket, PacketFlags, PacketTransformer};
@@ -33,7 +34,7 @@ impl SpinnyANSIVideoEncoder {
     }
 }
 
-impl PacketTransformer for SpinnyANSIVideoEncoder {
+impl PacketTransformer<'_> for SpinnyANSIVideoEncoder {
     type Source = cyanotype::VideoPacket<RgbImage>;
 
     fn encode_packet(&mut self, packet: &Self::Source) -> Option<EncodedPacket> {
@@ -134,7 +135,7 @@ impl ANSIVideoEncoder {
                 }
             }
 
-            frame += &"\x1b[1E".to_string();
+            frame += "\x1b[1E";
             instructions += 1;
             last_x = 0;
         }
@@ -160,7 +161,7 @@ impl ANSIVideoEncoder {
     }
 }
 
-impl PacketTransformer for ANSIVideoEncoder {
+impl PacketTransformer<'_> for ANSIVideoEncoder {
     type Source = cyanotype::VideoPacket<RgbImage>;
 
     fn encode_packet(&mut self, packet: &Self::Source) -> Option<EncodedPacket> {
