@@ -108,8 +108,7 @@
   <p>
     every file starts with an unsigned 8 bit integer in big-endian format, describing the length of the JSON metadata
     for the file.
-    the metadata which follows is composed of a messagepack object, containing two top level keys: <i>video_tracks</i>
-    and <i>subtitle_tracks</i>.
+    the metadata which follows is composed of a messagepack object, containing three top level keys: <i>video_tracks</i>, <i>subtitle_tracks</i> and <i>attachments</i>.
   </p>
   <h3 class="heading">1.1 video tracks</h3>
   <p>
@@ -199,6 +198,38 @@
         <tr>
           <td>index</td>
           <td>the stream index, which is encoded into every packet. does not necessarily correspond to the track's index in subtitle_tracks.</td>
+        </tr>
+      </tbody>
+    </table>
+  </p>
+  <h3 class="heading">1.3 attachments</h3>
+  <p>
+    attachments are miscellaneous files and other data attached to the file, but that are not encoded into the packet format.
+    the field is an array of an Attachment enum.
+    <br />
+    <br />
+    <table>
+      <colgroup>
+        <col class="packet-field">
+        <col class="packet-field-type">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>enum variant</th>
+          <th>data</th>
+          <th>comment</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Binary</td>
+          <td>byte array</td>
+          <td>catch-all attachment type for misc. binary data.</td>
+        </tr>
+        <tr>
+          <td>Midi</td>
+          <td>byte array</td>
+          <td>a MIDI track; as the bytes of a standard MIDI file.</td>
         </tr>
       </tbody>
     </table>
