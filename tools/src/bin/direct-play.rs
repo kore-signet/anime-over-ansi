@@ -11,12 +11,11 @@ use fast_image_resize as fr;
 use futures::stream::{self, Stream, StreamExt};
 
 use std::pin::Pin;
-use tokio::io::{self, AsyncWriteExt, BufWriter};
-use tokio::net::TcpListener;
+use tokio::io;
 use tokio::task::{self, JoinHandle};
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> io::Result<()> {
     let matches = clap::App::new("ansi.moe direct player")
         .version("1.0")
         .author("allie signet <allie@cat-girl.gay>")
@@ -189,65 +188,66 @@ async fn main() -> std::io::Result<()> {
         .interact()
         .unwrap();
 
-    let subtitle_stream: Pin<Box<dyn Stream<Item = SubtitlePacket> + Send>> =
-        if subtitle_stream_idx < subtitle_stream_indexes.len() {
-            if demuxer.subtitle_streams[&subtitle_stream_indexes[subtitle_stream_idx]]
-                .parameters()
-                .decoder_name()
-                .map(|v| v == "ssa" || v == "ass")
-                .unwrap_or(false)
-            {
-                let ssa_filter = SSAFilter {
-                    layers: matches
-                        .values_of("filter_ssa_layers")
-                        .map(|v| {
-                            v.map(|i| i.parse::<isize>().expect("invalid ssa layer number"))
-                                .collect::<Vec<isize>>()
-                        })
-                        .unwrap_or_default(),
-                    styles: matches
-                        .values_of("filter_ssa_styles")
-                        .map(|v| v.map(|s| s.to_owned()).collect::<Vec<String>>())
-                        .unwrap_or_default(),
-                };
+    let subtitle_stream: Pin<Box<dyn Stream<Item = SubtitlePacket> + Send>> = if subtitle_stream_idx
+        < subtitle_stream_indexes.len()
+    {
+        if demuxer.subtitle_streams[&subtitle_stream_indexes[subtitle_stream_idx]]
+            .parameters()
+            .decoder_name()
+            .map(|v| v == "ssa" || v == "ass")
+            .unwrap_or(false)
+        {
+            let ssa_filter = SSAFilter {
+                layers: matches
+                    .values_of("filter_ssa_layers")
+                    .map(|v| {
+                        v.map(|i| i.parse::<isize>().expect("invalid ssa layer number"))
+                            .collect::<Vec<isize>>()
+                    })
+                    .unwrap_or_default(),
+                styles: matches
+                    .values_of("filter_ssa_styles")
+                    .map(|v| v.map(|s| s.to_owned()).collect::<Vec<String>>())
+                    .unwrap_or_default(),
+            };
 
-                Box::pin(
-                    demuxer
-                        .subscribe_to_subtitles(subtitle_stream_indexes[subtitle_stream_idx])
-                        .unwrap()
-                        .filter_map(move |v| match v {
-                            cyanotype::SubtitlePacket::SSAEntry(entry) => {
-                                if ssa_filter.check(&entry) {
-                                    futures::future::ready(Some(SubtitlePacket::SSAEntry(entry)))
-                                } else {
-                                    futures::future::ready(None)
-                                }
-                            }
-                            cyanotype::SubtitlePacket::SRTEntry(entry) => {
-                                futures::future::ready(Some(SubtitlePacket::SRTEntry(entry)))
-                            }
-                            _ => futures::future::ready(None),
-                        })
-                        .boxed(),
-                )
-            } else {
+            Box::pin(
                 demuxer
                     .subscribe_to_subtitles(subtitle_stream_indexes[subtitle_stream_idx])
                     .unwrap()
-                    .filter_map(|v| match v {
+                    .filter_map(move |v| match v {
                         cyanotype::SubtitlePacket::SSAEntry(entry) => {
-                            futures::future::ready(Some(SubtitlePacket::SSAEntry(entry)))
+                            if ssa_filter.check(&entry) {
+                                futures::future::ready(play::subtitles::render_ssa(entry))
+                            } else {
+                                futures::future::ready(None)
+                            }
                         }
-                        cyanotype::SubtitlePacket::SRTEntry(entry) => {
-                            futures::future::ready(Some(SubtitlePacket::SRTEntry(entry)))
-                        }
+                        cyanotype::SubtitlePacket::SRTEntry(entry) => futures::future::ready(Some(
+                            play::subtitles::render_srt(entry.start, entry.end, entry.text),
+                        )),
                         _ => futures::future::ready(None),
                     })
-                    .boxed()
-            }
+                    .boxed(),
+            )
         } else {
-            stream::iter(vec![]).boxed()
-        };
+            demuxer
+                .subscribe_to_subtitles(subtitle_stream_indexes[subtitle_stream_idx])
+                .unwrap()
+                .filter_map(|v| match v {
+                    cyanotype::SubtitlePacket::SSAEntry(entry) => {
+                        futures::future::ready(play::subtitles::render_ssa(entry))
+                    }
+                    cyanotype::SubtitlePacket::SRTEntry(entry) => futures::future::ready(Some(
+                        play::subtitles::render_srt(entry.start, entry.end, entry.text),
+                    )),
+                    _ => futures::future::ready(None),
+                })
+                .boxed()
+        }
+    } else {
+        stream::iter(vec![]).boxed()
+    };
 
     let resize_filter = match matches.value_of("resize").unwrap_or("hamming") {
         "nearest" => fr::FilterType::Box,
@@ -283,57 +283,14 @@ async fn main() -> std::io::Result<()> {
         encoder.encode_packet(&VideoPacket { frame, time }).unwrap()
     });
 
-    let (mut otx, mut orx) = async_broadcast::broadcast::<Vec<u8>>(64);
+    let (mut otx, orx) = async_broadcast::broadcast::<Vec<u8>>(64);
     otx.set_overflow(true);
 
     let output_task: JoinHandle<io::Result<()>> =
         if let Some(addr) = matches.value_of("bind").map(|v| v.to_owned()) {
-            task::spawn(async move {
-                let listener = TcpListener::bind(addr).await?;
-                let mut sockets = Vec::new();
-                let mut to_rm = Vec::new();
-
-                loop {
-                    tokio::select! {
-                        Ok((mut socket,addr)) = listener.accept() => {
-                            if socket.write_all(b"\x1B[2J\x1B[1;1H").await.is_ok() {
-                                sockets.push(BufWriter::new(socket));
-                                println!("got new connection from {}", addr);
-                                println!("total connections: {}", sockets.len());
-                            };
-                        },
-                        Ok(msg) = orx.recv() => {
-                            if !to_rm.is_empty() {
-                                println!("disconnecting {} broken socket(s)", to_rm.len());
-                            }
-
-                            for i in to_rm.drain(..) {
-                                sockets.remove(i).into_inner().shutdown().await;
-                            }
-
-                            for (i,socket) in sockets.iter_mut().enumerate() {
-                                if socket.write_all(&msg).await.is_err() {
-                                    to_rm.push(i);
-                                };
-                            }
-                        },
-                        else => break
-                    }
-                }
-
-                Ok(())
-            })
+            task::spawn(play::player::play_to_tcp(orx, addr))
         } else {
-            task::spawn(async move {
-                print!("\x1B[2J\x1B[1;1H");
-
-                let mut stdout = io::stdout();
-                while let Some(val) = orx.next().await {
-                    stdout.write_all(&val).await?;
-                }
-
-                Ok(())
-            })
+            task::spawn(play::player::play_to_stdout(orx))
         };
 
     let runner = task::spawn(player::play(resized_stream.boxed(), subtitle_stream, otx));
@@ -342,7 +299,7 @@ async fn main() -> std::io::Result<()> {
         demuxer_task,
         runner,
         output_task
-    };
+    }?;
 
     Ok(())
 }

@@ -1,6 +1,6 @@
 use anime_telnet::{
     encoding::PacketDecoder,
-    metadata::{SubtitleFormat, VideoMetadata, Attachment},
+    metadata::{SubtitleFormat, VideoMetadata},
     subtitles::SSAFilter,
 };
 use play::{
@@ -14,12 +14,7 @@ use dialoguer::{theme::ColorfulTheme, Select};
 use futures::channel::mpsc;
 use futures::{SinkExt, StreamExt};
 use rmp_serde as rmps;
-use rodio::{OutputStream, Sink};
-use synthrs::midi;
-use synthrs::synthesizer::{make_samples_from_midi, peak_normalize, quantize_samples};
-use synthrs::wave;
-use tokio::io::{self, AsyncReadExt, AsyncWriteExt, BufWriter};
-use tokio::net::TcpListener;
+use tokio::io::{self, AsyncReadExt};
 use tokio::task::{self, JoinHandle};
 use tokio_util::codec::FramedRead;
 
@@ -76,21 +71,6 @@ async fn main() -> std::io::Result<()> {
     let mut metadata_bytes = vec![0; metadata_len as usize];
     input_fs.read_exact(&mut metadata_bytes).await?;
     let mut metadata: VideoMetadata = rmps::from_read_ref(&metadata_bytes).unwrap();
-
-    let audio_samples: Vec<Vec<i16>> = metadata
-        .attachments
-        .iter()
-        .filter_map(|v| {
-            if let Attachment::Midi(bytes) = v {
-                let mut cursor = std::io::Cursor::new(bytes);
-                let track = midi::read_midi(&mut cursor).unwrap();
-                let samples = make_samples_from_midi(wave::sine_wave, 44_100, true, track).unwrap();
-                Some(quantize_samples::<i16>(&peak_normalize(&samples)))
-            } else {
-                None
-            }
-        })
-        .collect();
 
     let video_selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("choose video track")
@@ -168,12 +148,15 @@ async fn main() -> std::io::Result<()> {
                     .collect(),
                     Some(ssa_filter),
                 ))),
-                SubtitleFormat::SubRip => Some(Box::new(SRTDecoder::new())),
+                SubtitleFormat::SubRip => Some(Box::new(SRTDecoder)),
                 _ => None,
             }
         } else {
             None
         };
+
+    #[cfg(feature = "midi")]
+    let midi_player = play::midi::MidiPlayer::new(&metadata.attachments);
 
     let mut packet_stream = FramedRead::new(input_fs, PacketReadCodec::new(true));
     let (mut stx, srx) = mpsc::channel(256);
@@ -182,70 +165,20 @@ async fn main() -> std::io::Result<()> {
         stx.close().await.unwrap();
     }
 
-    let (mut otx, mut orx) = async_broadcast::broadcast::<Vec<u8>>(64);
+    let (mut otx, orx) = async_broadcast::broadcast::<Vec<u8>>(64);
     otx.set_overflow(true);
 
     let output_task: JoinHandle<io::Result<()>> =
         if let Some(addr) = matches.value_of("bind").map(|v| v.to_owned()) {
-            task::spawn(async move {
-                let listener = TcpListener::bind(addr).await?;
-                let mut sockets = Vec::new();
-                let mut to_rm = Vec::new();
-
-                loop {
-                    tokio::select! {
-                        Ok((mut socket,addr)) = listener.accept() => {
-                            if socket.write_all(b"\x1B[2J\x1B[1;1H").await.is_ok() {
-                                sockets.push(BufWriter::new(socket));
-                                println!("got new connection from {}", addr);
-                                println!("total connections: {}", sockets.len());
-                            };
-                        },
-                        Ok(msg) = orx.recv() => {
-                            if !to_rm.is_empty() {
-                                println!("disconnecting {} broken socket(s)", to_rm.len());
-                            }
-
-                            for i in to_rm.drain(..) {
-                                sockets.remove(i).into_inner().shutdown().await;
-                            }
-
-                            for (i,socket) in sockets.iter_mut().enumerate() {
-                                if socket.write_all(&msg).await.is_err() {
-                                    to_rm.push(i);
-                                };
-                            }
-                        },
-                        else => break
-                    }
-                }
-
-                Ok(())
-            })
+            task::spawn(play::player::play_to_tcp(orx, addr))
         } else {
-            task::spawn(async move {
-                print!("\x1B[2J\x1B[1;1H");
-
-                let mut stdout = io::stdout();
-                while let Some(val) = orx.next().await {
-                    stdout.write_all(&val).await?;
-                }
-
-                Ok(())
-            })
+            task::spawn(play::player::play_to_stdout(orx))
         };
 
-    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-    let sink = Sink::try_new(&stream_handle).unwrap();
-    sink.pause();
-    for track in audio_samples {
-        let buffer = rodio::buffer::SamplesBuffer::new(1, 44_100, track);
-        sink.append(buffer);
-    }
+    #[cfg(feature = "midi")]
+    midi_player.play();
 
-    sink.play();
-
-    let runner = task::spawn(player::play(Box::pin(vrx), Box::pin(srx), otx));
+    let runner = task::spawn(player::play(vrx, srx, otx));
 
     while let Some(packet) = packet_stream.next().await {
         let packet = packet?;

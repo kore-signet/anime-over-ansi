@@ -112,5 +112,6 @@ pub enum Attachment {
 pub struct VideoMetadata {
     pub video_tracks: Vec<VideoTrack>,
     pub subtitle_tracks: Vec<SubtitleTrack>,
+    #[serde(default)]
     pub attachments: Vec<Attachment>,
 }

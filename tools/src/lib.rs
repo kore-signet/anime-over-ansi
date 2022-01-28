@@ -135,7 +135,7 @@ impl ANSIVideoEncoder {
                 }
             }
 
-            frame += &"\x1b[1E".to_string();
+            frame += "\x1b[1E";
             instructions += 1;
             last_x = 0;
         }

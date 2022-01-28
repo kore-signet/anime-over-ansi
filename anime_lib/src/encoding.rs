@@ -105,18 +105,18 @@ impl ProcessorPipeline {
         let mut res = Vec::with_capacity(self.dither_modes.len());
 
         for mode in &self.dither_modes {
-            match mode {
-                &DitherMode::FloydSteinberg(map) => {
+            match *mode {
+                DitherMode::FloydSteinberg(map) => {
                     let mut dframe = frame.clone();
                     imageops::dither(&mut dframe, &map);
                     res.push((*mode, dframe));
                 }
-                &DitherMode::Pattern(map, size, multiplier) => {
+                DitherMode::Pattern(map, size, multiplier) => {
                     let mut dframe = frame.clone();
                     pattern::dither(&mut dframe, size, multiplier as f32 / 10_000.0, map);
                     res.push((*mode, dframe));
                 }
-                &DitherMode::None => {
+                DitherMode::None => {
                     res.push((*mode, frame.clone()));
                 }
             }
@@ -183,7 +183,7 @@ pub trait AnsiEncoder {
                 last_upper = Some(*upper);
                 last_lower = Some(*lower);
             }
-            frame += &"\x1b[1E".to_string();
+            frame += "\x1b[1E";
             instructions += 1;
         }
 
