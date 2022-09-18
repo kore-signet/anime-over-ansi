@@ -1,0 +1,8 @@
+[workspace]
+members = ["colorful", "img2ansi", "container", "encoder", "player"]
+
+# [profile.release]
+# lto = true
+# [profile.release]
+# strip = true
+# lto = true
