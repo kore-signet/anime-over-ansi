@@ -1,9 +1,8 @@
 [workspace]
-members = [
-    "anime_lib",
-    "tools",
-    "play"
-]
+members = ["colorful", "img2ansi", "container", "encoder", "player"]
 
-[profile.release]
-debug = true
+# [profile.release]
+# lto = true
+# [profile.release]
+# strip = true
+# lto = true

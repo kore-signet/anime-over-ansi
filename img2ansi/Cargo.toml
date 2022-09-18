@@ -1,0 +1,14 @@
+[package]
+name = "img2ansi"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+arrayvec = "0.7.2"
+colorful = { path = "../colorful" }
+container = { path = "../container" }
+image = { version = "0.24.2", default-features = false, features = ["rgb"] }
+itoa = "1.0.2"
+bytes = "1.1.0"
