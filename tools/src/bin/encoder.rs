@@ -1,17 +1,16 @@
 use anime_telnet::{encoding::*, metadata::*, palette::AnsiColorMap};
 use anime_telnet_encoder::{
-    subtitles, ANSIVideoEncoder, PacketWriteCodec as PacketCodec, SpinnyANSIVideoEncoder,
+    subtitles, ANSIVideoEncoder, FFMpegProcessor, PacketWriteCodec as PacketCodec,
+    SpinnyANSIVideoEncoder,
 };
 use clap::Arg;
 
 use cyanotype::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use indicatif::{MultiProgress, ProgressDrawTarget};
 use std::time::SystemTime;
 use tokio_util::codec::FramedWrite;
-
-use fast_image_resize as fr;
 
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
@@ -19,6 +18,7 @@ use image::RgbImage;
 use rmp_serde as rmps;
 use std::path::Path;
 use std::pin::Pin;
+use std::time::Duration;
 use tokio::io::{self, AsyncWriteExt};
 
 // gets and removes value from hashmap for whichever one of the keys exists in it
@@ -527,16 +527,6 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
-    let resize_filter = match matches.value_of("resize").unwrap_or("hamming") {
-        "nearest" => fr::FilterType::Box,
-        "bilinear" => fr::FilterType::Bilinear,
-        "hamming" => fr::FilterType::Hamming,
-        "catmullrom" => fr::FilterType::CatmullRom,
-        "mitchell" => fr::FilterType::Mitchell,
-        "lanczos" => fr::FilterType::Lanczos3,
-        _ => fr::FilterType::Hamming,
-    };
-
     progress_bars.set_draw_target(ProgressDrawTarget::stderr());
 
     let mut out_file = tokio::fs::File::create(matches.value_of("OUT").unwrap()).await?;
@@ -550,17 +540,26 @@ async fn main() -> std::io::Result<()> {
     out_file.write_u64(metadata_bytes.len() as u64).await?;
     out_file.write_all(&metadata_bytes).await?;
 
-    let mut processor_pipeline: HashMap<(u32, u32), ProcessorPipeline> = HashMap::new();
+    let mut processor_pipeline: HashMap<(u32, u32), FFMpegProcessor> = HashMap::new();
+
+    let raw_video_stream = demuxer.video_streams.values().next().unwrap();
+    let video_params = raw_video_stream
+        .parameters()
+        .into_video_codec_parameters()
+        .unwrap();
+    let (source_width, source_height) = (video_params.width(), video_params.height());
 
     for e in encoders.iter() {
         processor_pipeline
             .entry((e.underlying.width, e.underlying.height))
-            .or_insert(ProcessorPipeline {
-                width: e.underlying.width,
-                height: e.underlying.height,
-                filter: resize_filter,
-                dither_modes: HashSet::new(),
-            })
+            .or_insert(FFMpegProcessor::new(
+                raw_video_stream.pixel_format(),
+                [],
+                source_width,
+                source_height,
+                e.underlying.width as usize,
+                e.underlying.height as usize,
+            ))
             .dither_modes
             .insert(e.underlying.dither_mode);
     }
@@ -574,21 +573,23 @@ async fn main() -> std::io::Result<()> {
         demuxer.run().await.unwrap();
     });
 
-    let pipelines: Vec<ProcessorPipeline> =
+    let mut pipelines: Vec<FFMpegProcessor> =
         processor_pipeline.into_iter().map(|(_, v)| v).collect();
 
     let resized_stream = video_stream
-        .map(move |img| {
-            let time = img.time;
+        .map(move |frame| {
+            let time = Duration::from_nanos(frame.pts().as_nanos().unwrap() as u64);
 
-            pipelines
-                .iter()
-                .flat_map(move |p| {
-                    p.process(&img.frame)
-                        .into_iter()
-                        .map(move |r| ((p.width, p.height, r.0), VideoPacket { frame: r.1, time }))
-                })
-                .collect::<HashMap<(u32, u32, DitherMode), VideoPacket<RgbImage>>>()
+            let mut processed: HashMap<(u32, u32, DitherMode), (Duration, RgbImage)> =
+                HashMap::new();
+
+            for p in pipelines.iter_mut() {
+                for r in p.process(&frame) {
+                    processed.insert((p.width, p.height, r.0), (time, r.1));
+                }
+            }
+
+            processed
         })
         .flat_map(|frames| {
             futures::stream::iter(

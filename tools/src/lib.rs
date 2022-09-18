@@ -5,10 +5,16 @@ pub mod subtitles;
 
 use anime_telnet::encoding::{AnsiEncoder, EncodedPacket, PacketFlags, PacketTransformer};
 use anime_telnet::metadata::{ColorMode, DitherMode};
+use anime_telnet::pattern;
 use futures::stream::Stream;
-use image::{Rgb, RgbImage};
+use image::{imageops, Rgb, RgbImage};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use std::collections::HashSet;
 use std::pin::Pin;
+use std::str::FromStr;
+use std::time::Duration;
+
+use cyanotype::{PixelFormat, VideoFrame, VideoFrameScaler};
 
 /// An ANSI video encoder with a progress bar.
 pub struct SpinnyANSIVideoEncoder {
@@ -35,15 +41,15 @@ impl SpinnyANSIVideoEncoder {
 }
 
 impl PacketTransformer<'_> for SpinnyANSIVideoEncoder {
-    type Source = cyanotype::VideoPacket<RgbImage>;
+    type Source = (Duration, RgbImage);
 
     fn encode_packet(&mut self, packet: &Self::Source) -> Option<EncodedPacket> {
         self.bar.inc(1);
         Some(EncodedPacket::from_data(
             self.underlying.stream_index,
-            packet.time,
+            packet.0,
             None,
-            self.underlying.encode_frame(&packet.frame).0.into_bytes(),
+            self.underlying.encode_frame(&packet.1).0.into_bytes(),
             Some(self.underlying.encoder_opts),
         ))
     }
@@ -162,20 +168,85 @@ impl ANSIVideoEncoder {
 }
 
 impl PacketTransformer<'_> for ANSIVideoEncoder {
-    type Source = cyanotype::VideoPacket<RgbImage>;
+    type Source = (Duration, RgbImage);
 
     fn encode_packet(&mut self, packet: &Self::Source) -> Option<EncodedPacket> {
-        let (frame, keyframe) = self.encode_best(&packet.frame);
+        let (frame, keyframe) = self.encode_best(&packet.1);
         let mut flags = self.encoder_opts;
         flags.is_keyframe = keyframe;
 
         Some(EncodedPacket::from_data(
             self.stream_index,
-            packet.time,
+            packet.0,
             None,
             frame.into_bytes(),
             Some(flags),
         ))
+    }
+}
+
+pub struct FFMpegProcessor {
+    scaler: VideoFrameScaler,
+    pub width: u32,
+    pub height: u32,
+    pub dither_modes: HashSet<DitherMode>,
+}
+
+impl FFMpegProcessor {
+    pub fn new(
+        source_pixel_format: PixelFormat,
+        dither_modes: impl Into<HashSet<DitherMode>>,
+        source_width: usize,
+        source_height: usize,
+        target_width: usize,
+        target_height: usize,
+    ) -> FFMpegProcessor {
+        let video_scaler = VideoFrameScaler::builder()
+            .source_pixel_format(source_pixel_format)
+            .source_width(source_width)
+            .source_height(source_height)
+            .target_pixel_format(PixelFormat::from_str("rgb24").unwrap())
+            .target_width(target_width)
+            .target_height(target_height)
+            .algorithm(cyanotype::ac_ffmpeg::codec::video::scaler::Algorithm::Bicubic)
+            .build()
+            .unwrap();
+
+        FFMpegProcessor {
+            scaler: video_scaler,
+            width: target_width as u32,
+            height: target_height as u32,
+            dither_modes: dither_modes.into(),
+        }
+    }
+
+    /// Process an image, returning a vector with resized versions of it in every color mode requested.
+    pub fn process(&mut self, img: &VideoFrame) -> Vec<(DitherMode, RgbImage)> {
+        let img = self.scaler.scale(img).unwrap();
+        let frame: RgbImage =
+            RgbImage::from_raw(self.width, self.height, img.planes()[0].data().to_vec()).unwrap();
+
+        let mut res = Vec::with_capacity(self.dither_modes.len());
+
+        for mode in &self.dither_modes {
+            match *mode {
+                DitherMode::FloydSteinberg(map) => {
+                    let mut dframe = frame.clone();
+                    imageops::dither(&mut dframe, &map);
+                    res.push((*mode, dframe));
+                }
+                DitherMode::Pattern(map, size, multiplier) => {
+                    let mut dframe = frame.clone();
+                    pattern::dither(&mut dframe, size, multiplier as f32 / 10_000.0, map);
+                    res.push((*mode, dframe));
+                }
+                DitherMode::None => {
+                    res.push((*mode, frame.clone()));
+                }
+            }
+        }
+
+        res
     }
 }
 
