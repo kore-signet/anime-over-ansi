@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+#[cfg(feature = "cuda")]
+use crate::cuda::CudaDitherer;
 use colorful::pattern_dithering::MatrixSize;
 use container::metadata::ColorMode;
 use num_enum::TryFromPrimitive;
@@ -97,6 +99,8 @@ pub struct DitherConfig {
     pub distance_function: DistanceFunction,
     pub matrix_size: MatrixSize,
     pub multiplier: f32,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl Default for DitherConfig {
@@ -106,6 +110,8 @@ impl Default for DitherConfig {
             distance_function: DistanceFunction::CAM02,
             matrix_size: MatrixSize::Four,
             multiplier: 0.09,
+            width: 192,
+            height: 108,
         }
     }
 }
@@ -143,6 +149,13 @@ impl DitherConfig {
                     )),
                 }
             }
+            #[cfg(feature = "cuda")]
+            DitherMethod::Cuda => Box::new(
+                CudaDitherer::new(self.width, self.height, self.multiplier, self.matrix_size)
+                    .unwrap(),
+            ),
+            #[cfg(not(feature = "cuda"))]
+            DitherMethod::Cuda => unreachable!()
         }
     }
 }
@@ -170,6 +183,7 @@ impl Display for DistanceFunction {
 pub enum DitherMethod {
     FloydSteinberg = 0,
     Pattern = 1,
+    Cuda = 2,
 }
 
 impl Display for DitherMethod {
@@ -177,6 +191,7 @@ impl Display for DitherMethod {
         match self {
             &Self::FloydSteinberg => write!(f, "floyd-steinberg"),
             &Self::Pattern => write!(f, "ordered pattern"),
+            &Self::Cuda => write!(f, "cuda-accelerated ordered pattern"),
         }
     }
 }

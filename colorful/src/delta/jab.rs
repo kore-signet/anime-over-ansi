@@ -30,7 +30,7 @@ pub unsafe fn closest_ansi_avx(rgb: &[u8; 3]) -> (u8, f32) {
             let mut b = _mm256_sub_ps(lab_mm, pal_b); // subtract (lhs.l - rhs.l), (lhs.a - rhs.a), (lhs.b - rhs.b)
             b = _mm256_mul_ps(b, b); // raise to power of two
 
-            _mm256_store_ps(tmp.as_mut_ptr() as *mut f32, _mm256_hadd_ps(a, b)); // add up (l + a) for every value and then store
+            _mm256_storeu_ps(tmp.as_mut_ptr() as *mut f32, _mm256_hadd_ps(a, b)); // add up (l + a) for every value and then store
             let start = i * 4;
             // add up (l + a) + b
             *res_array.get_unchecked_mut(start) = tmp.get_unchecked(0) + tmp.get_unchecked(1);

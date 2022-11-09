@@ -6,17 +6,81 @@ use container::metadata::*;
 use image::{Rgb, RgbImage};
 use std::fmt::Write;
 
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum Pixel {
+    Rgb(Rgb<u8>),
+    EightBit(u8),
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum VideoImage {
+    FullColor(RgbImage),
+    EightBit {
+        width: u32,
+        height: u32,
+        data: Vec<u8>,
+    },
+}
+
+impl VideoImage {
+    /// panics if image is not full color
+    pub fn as_full_color(&self) -> &RgbImage {
+        match self {
+            VideoImage::FullColor(i) => i,
+            _ => panic!(),
+        }
+    }
+
+    /// panics if image is not full color
+    pub fn as_full_color_mut(&mut self) -> &mut RgbImage {
+        match self {
+            VideoImage::FullColor(i) => i,
+            _ => panic!(),
+        }
+    }
+
+    pub fn into_full_color(self) -> RgbImage {
+        match self {
+            VideoImage::FullColor(i) => i,
+            _ => panic!(),
+        }
+    }
+
+    pub fn get_pixel(&self, x: u32, y: u32) -> Pixel {
+        match self {
+            VideoImage::FullColor(i) => Pixel::Rgb(*i.get_pixel(x, y)),
+            VideoImage::EightBit { width, data, .. } => {
+                Pixel::EightBit(data[(y * width + x) as usize])
+            }
+        }
+    }
+
+    pub fn height(&self) -> u32 {
+        match self {
+            VideoImage::FullColor(i) => i.height(),
+            VideoImage::EightBit { height, .. } => *height,
+        }
+    }
+
+    pub fn width(&self) -> u32 {
+        match self {
+            VideoImage::FullColor(i) => i.width(),
+            VideoImage::EightBit { width, .. } => *width,
+        }
+    }
+}
+
 // A base trait for any ANSI image frame encoder, automatically implementing most of the encoding based on a few getter methods.
 pub trait AnsiEncoder {
     #[inline(always)]
-    fn color(&self, pixel: &Rgb<u8>, fg: bool, out: &mut impl BufMut) {
-        match self.needs_color() {
-            ColorMode::EightBit => out.put_slice(if fg {
-                REVERSE_PALETTE_FG_CODES[&pixel.0].as_bytes()
+    fn color(&self, pixel: &Pixel, fg: bool, out: &mut impl BufMut) {
+        match pixel {
+            Pixel::EightBit(byte) => out.put_slice(if fg {
+                PALETTE_FG_CODES[*byte as usize].as_bytes()
             } else {
-                REVERSE_PALETTE_BG_CODES[&pixel.0].as_bytes()
+                PALETTE_BG_CODES[*byte as usize].as_bytes()
             }),
-            _ => {
+            Pixel::Rgb(pixel) => {
                 if fg {
                     out.put_slice(b"\x1b[38;2;");
                 } else {
@@ -34,9 +98,9 @@ pub trait AnsiEncoder {
         }
     }
 
-    fn encode_frame(&mut self, image: &RgbImage) -> BytesMut {
-        let mut last_upper: Option<Rgb<u8>> = None;
-        let mut last_lower: Option<Rgb<u8>> = None;
+    fn encode_frame(&mut self, image: &VideoImage) -> BytesMut {
+        let mut last_upper: Option<Pixel> = None;
+        let mut last_lower: Option<Pixel> = None;
 
         let mut frame = BytesMut::with_capacity((image.width() * image.height() * 20) as usize);
         for y in (0..image.height() - 1).step_by(2) {
@@ -44,18 +108,18 @@ pub trait AnsiEncoder {
                 let upper = image.get_pixel(x, y);
                 let lower = image.get_pixel(x, y + 1);
 
-                if last_upper.is_none() || &last_upper.unwrap() != upper {
-                    self.color(upper, true, &mut frame);
+                if last_upper.is_none() || last_upper.unwrap() != upper {
+                    self.color(&upper, true, &mut frame);
                 }
 
-                if last_lower.is_none() || &last_lower.unwrap() != lower {
-                    self.color(lower, false, &mut frame);
+                if last_lower.is_none() || last_lower.unwrap() != lower {
+                    self.color(&lower, false, &mut frame);
                 }
 
                 frame.put_slice(b"\xE2\x96\x80");
 
-                last_upper = Some(*upper);
-                last_lower = Some(*lower);
+                last_upper = Some(upper);
+                last_lower = Some(lower);
             }
 
             frame.put_slice(b"\x1b[1E");
@@ -64,9 +128,9 @@ pub trait AnsiEncoder {
         frame
     }
 
-    fn encode_diffed_frame(&self, image: &RgbImage, old_img: &RgbImage) -> BytesMut {
-        let mut last_upper: Option<Rgb<u8>> = None;
-        let mut last_lower: Option<Rgb<u8>> = None;
+    fn encode_diffed_frame(&self, image: &VideoImage, old_img: &VideoImage) -> BytesMut {
+        let mut last_upper: Option<Pixel> = None;
+        let mut last_lower: Option<Pixel> = None;
 
         let mut last_x = 0;
 
@@ -81,18 +145,18 @@ pub trait AnsiEncoder {
                         write!(frame, "\x1b[{}G", x + 1);
                     }
 
-                    if last_upper.is_none() || &last_upper.unwrap() != upper {
-                        self.color(upper, true, &mut frame);
+                    if last_upper.is_none() || last_upper.unwrap() != upper {
+                        self.color(&upper, true, &mut frame);
                     }
 
-                    if last_lower.is_none() || &last_lower.unwrap() != lower {
-                        self.color(lower, false, &mut frame);
+                    if last_lower.is_none() || last_lower.unwrap() != lower {
+                        self.color(&lower, false, &mut frame);
                     }
 
                     frame.put_slice(b"\xE2\x96\x80"); // "▀"
 
-                    last_upper = Some(*upper);
-                    last_lower = Some(*lower);
+                    last_upper = Some(upper);
+                    last_lower = Some(lower);
 
                     last_x = x;
                 }
@@ -105,7 +169,7 @@ pub trait AnsiEncoder {
         frame
     }
 
-    fn encode_best(&mut self, image: &RgbImage) -> (BytesMut, bool) {
+    fn encode_best(&mut self, image: &VideoImage) -> (BytesMut, bool) {
         let use_diffing = self.use_diffing();
 
         if use_diffing {
@@ -132,5 +196,5 @@ pub trait AnsiEncoder {
         false
     }
 
-    fn replace_last_frame(&mut self, new_frame: RgbImage) -> Option<RgbImage>;
+    fn replace_last_frame(&mut self, new_frame: VideoImage) -> Option<VideoImage>;
 }

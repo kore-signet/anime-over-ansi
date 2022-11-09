@@ -56,22 +56,35 @@ pub fn select_video_track(
         return Ok(AnsiTrack::VideoTrack(track));
     }
 
+    let dither_choices: &'static [&str] = if cfg!(feature = "cuda") {
+        &[
+            "floyd-steinberg",
+            "ordered pattern dithering",
+            "cuda-accelerated pattern dithering",
+        ]
+    } else {
+        &["floyd-steinberg", "ordered pattern dithering"]
+    };
+
     track.dither_mode.method = DitherMethod::try_from(
         dialoguer::Select::with_theme(&theme)
             .with_prompt("dither method")
-            .item("floyd-steinberg")
-            .item("ordered pattern dithering")
+            .items(dither_choices)
             .interact()? as u8,
     )?;
 
-    track.dither_mode.distance_function = DistanceFunction::try_from(
-        dialoguer::Select::with_theme(&theme)
-            .with_prompt("color distance function")
-            .item("CAM02 (best, fast)")
-            .item("CIE94 (medium, slowest)")
-            .item("CIE76 (worst, fastest)")
-            .interact()? as u8,
-    )?;
+    track.dither_mode.distance_function = if track.dither_mode.method != DitherMethod::Cuda {
+        DistanceFunction::try_from(
+            dialoguer::Select::with_theme(&theme)
+                .with_prompt("color distance function")
+                .item("CAM02 (best, fast)")
+                .item("CIE94 (medium, slowest)")
+                .item("CIE76 (worst, fastest)")
+                .interact()? as u8,
+        )?
+    } else {
+        DistanceFunction::CAM02
+    };
 
     if track.dither_mode.method == DitherMethod::FloydSteinberg {
         return Ok(AnsiTrack::VideoTrack(track));

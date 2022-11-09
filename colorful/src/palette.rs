@@ -324,6 +324,28 @@ lazy_static! {
         pal
     };
 
+    pub static ref PALETTE_FG_CODES: [ArrayString<20>; 256] = {
+        let mut out = [ArrayString::new_const(); 256];
+
+        for (i, _) in PALETTE.iter().enumerate() {
+            out[i] = ArrayString::from(&format!("\x1B[38;5;{}m", i)).unwrap();
+        }
+
+
+        out
+    };
+
+    pub static ref PALETTE_BG_CODES: [ArrayString<20>; 256] = {
+        let mut out = [ArrayString::new_const(); 256];
+
+        for (i, _) in PALETTE.iter().enumerate() {
+            out[i] = ArrayString::from(&format!("\x1B[48;5;{}m", i)).unwrap();
+        }
+
+
+        out
+    };
+
     pub static ref REVERSE_PALETTE_FG_CODES: HashMap<[u8; 3], ArrayString<20>> = {
         let mut pal = HashMap::new();
         for (i, c) in PALETTE.iter().enumerate() {
@@ -373,7 +395,7 @@ pub struct AnsiColorMap<T: DistanceMethod> {
 }
 
 impl<T: DistanceMethod> AnsiColorMap<T> {
-    pub const fn new() -> AnsiColorMap<T> {
+    pub fn new() -> AnsiColorMap<T> {
         AnsiColorMap {
             _spooky: PhantomData,
         }

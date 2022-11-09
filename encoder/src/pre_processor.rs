@@ -34,12 +34,14 @@ pub mod ditherers {
     };
     use image::imageops;
 
+    use img2ansi::VideoImage;
+
     use super::PreProcessor;
 
     pub struct FloydSteinberg<T: DistanceMethod>(pub AnsiColorMap<T>);
 
     impl<T: DistanceMethod> FloydSteinberg<T> {
-        pub const fn new() -> FloydSteinberg<T> {
+        pub fn new() -> FloydSteinberg<T> {
             FloydSteinberg(AnsiColorMap::new())
         }
     }
@@ -51,7 +53,7 @@ pub mod ditherers {
     }
 
     impl<T: DistanceMethod> Pattern<T> {
-        pub const fn new(matrix_size: MatrixSize, multiplier: f32) -> Pattern<T> {
+        pub fn new(matrix_size: MatrixSize, multiplier: f32) -> Pattern<T> {
             Pattern {
                 map: AnsiColorMap::new(),
                 matrix_size,
@@ -65,7 +67,7 @@ pub mod ditherers {
     {
         #[inline(always)]
         fn map(&mut self, frame: &mut crate::video_encoder::DecodedVideoFrame) {
-            imageops::dither(&mut frame.image, &self.0);
+            imageops::dither(frame.image.as_full_color_mut(), &self.0);
         }
     }
 
@@ -74,12 +76,16 @@ pub mod ditherers {
     {
         #[inline(always)]
         fn map(&mut self, frame: &mut crate::video_encoder::DecodedVideoFrame) {
-            pattern_dithering::dither(
-                &mut frame.image,
-                self.matrix_size,
-                self.multiplier,
-                self.map,
-            );
+            frame.image = VideoImage::EightBit {
+                width: frame.image.as_full_color().width(),
+                height: frame.image.as_full_color().height(),
+                data: pattern_dithering::dither(
+                    frame.image.as_full_color(),
+                    self.matrix_size,
+                    self.multiplier,
+                    self.map,
+                ),
+            };
         }
     }
 }

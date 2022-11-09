@@ -1,5 +1,5 @@
 [workspace]
-members = ["colorful", "img2ansi", "container", "encoder", "player"]
+members = ["colorful", "img2ansi", "container", "encoder", "player", "gpu"]
 
 # [profile.release]
 # lto = true

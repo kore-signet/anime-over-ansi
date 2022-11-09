@@ -8,7 +8,7 @@ use container::{
 };
 use enumflags2::{make_bitflags, BitFlags};
 use image::RgbImage;
-use img2ansi::AnsiEncoder;
+use img2ansi::{AnsiEncoder, VideoImage};
 
 pub struct FrameEncoder {
     pub stream_index: u16,
@@ -16,7 +16,7 @@ pub struct FrameEncoder {
     pub height: u32,
     pub color: ColorMode,
     pub use_diffing: bool,
-    pub last_frame: Option<RgbImage>,
+    pub last_frame: Option<VideoImage>,
 }
 
 impl AnsiEncoder for FrameEncoder {
@@ -32,7 +32,7 @@ impl AnsiEncoder for FrameEncoder {
         self.color
     }
 
-    fn replace_last_frame(&mut self, new_frame: RgbImage) -> Option<RgbImage> {
+    fn replace_last_frame(&mut self, new_frame: VideoImage) -> Option<VideoImage> {
         self.last_frame.replace(new_frame)
     }
 
@@ -44,7 +44,7 @@ impl AnsiEncoder for FrameEncoder {
 pub struct DecodedVideoFrame {
     pub pts: Duration,
     pub duration: Duration,
-    pub image: RgbImage,
+    pub image: VideoImage,
 }
 
 impl ToPacket for FrameEncoder {

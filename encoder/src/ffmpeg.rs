@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::{PullSource, Transformer};
+use img2ansi::VideoImage;
 
 use super::video_encoder::DecodedVideoFrame;
 use ac_ffmpeg::codec::video::scaler::Algorithm;
@@ -187,7 +188,7 @@ impl FFMpegVideoDecoder {
             return Ok(Some(DecodedVideoFrame {
                 pts,
                 duration,
-                image,
+                image: VideoImage::FullColor(image),
             }));
         }
 

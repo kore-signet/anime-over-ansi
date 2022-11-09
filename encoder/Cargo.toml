@@ -10,7 +10,7 @@ anyhow = "1.0"
 ac-ffmpeg = { git = "https://github.com/emily-signet/rust-ac-ffmpeg", version = "0.17.3" }
 img2ansi = { path = "../img2ansi" }
 container = { path = "../container", features = ["codec"] }
-image = { version = "0.24.2", default-features = false, features = ["rgb"] }
+image = { version = "0.23", default-features = false, features = ["rgb"] }
 enumflags2 = "0.7.5"
 colorful = { path = "../colorful" }
 crossbeam-channel = "0.5.5"
@@ -19,7 +19,7 @@ tokio-util = { version = "0.7", features = ["codec"] }
 futures = { version = "0.3" }
 tokio-stream = "0.1.9"
 postage = "0.5.0"
-eframe = { version = "0.18.0", optional = true }
+# eframe = { version = "0.17.0", optional = true }
 rfd = { version = "0.9.1", optional = true }
 bytes = "1.2.1"
 rmp-serde = "1.1.0"
@@ -28,15 +28,21 @@ clap = "2.34"
 num_enum = "0.5.7"
 zstd = { version = "0.11.2", features = ["experimental"], optional = true }
 player = { path = "../player" }
+cust = { version = "0.3.2", optional = true }
+ouroboros = "0.15.5"
+
+[build-dependencies]
+cuda_builder = { version = "0.3.0", optional = true }
 
 [features]
 default = ["compression"]
-gui = ["eframe", "rfd"]
+gui = ["rfd"]
 compression = ["zstd"]
+cuda = ["cust", "cuda_builder"]
 
-[[bin]]
-name = "gui"
-required-features = ["gui"]
+# [[bin]]
+# name = "gui"
+# required-features = ["gui"]
 
 [dependencies.substation]
 git = "https://github.com/emily-signet/substation.git"

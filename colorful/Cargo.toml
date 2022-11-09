@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 argmm = { git = "https://github.com/emily-signet/argmm", version = "0.1.2" }
-image = { version = "0.24.2", default-features = false }
-kasi-kule = "0.3.2"
+image = { version = "0.23", default-features = false }
+kasi-kule = { git = "https://github.com/emily-signet/kasi-kule", features = ["sse"] }
 lab = "0.11.0"
 lazy_static = "1.4.0"
 rayon = "1.5.3"

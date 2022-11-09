@@ -39,64 +39,88 @@ fn to_luma(c: [u8; 3]) -> f32 {
     (c[0] as f32 * 299.0 + c[1] as f32 * 587.0 + c[2] as f32 * 114.0) / 255000.0
 }
 
-pub fn mix<const SIZE: usize>(
-    color: [u8; 3],
-    multiplier: f32,
-    color_map: AnsiColorMap<impl DistanceMethod>,
-) -> ArrayVec<[u8; 3], SIZE> {
-    let mut err_acc: [u8; 3] = [0, 0, 0];
-    // let mut candidates: Vec<[u8; 3]> = Vec::with_capacity(size);
-    let mut candidates: ArrayVec<[u8; 3], SIZE> = ArrayVec::new();
+macro_rules! mix_def {
+    ($name:ident, $size:literal) => {
+        pub fn $name(
+            color: [u8; 3],
+            multiplier: f32,
+            color_map: AnsiColorMap<impl DistanceMethod>,
+            pick_idx: usize,
+        ) -> u8 {
+            let mut err_acc: [u8; 3] = [0, 0, 0];
+            // let mut candidates: Vec<[u8; 3]> = Vec::with_capacity(size);
+            let mut candidates: ArrayVec<([u8; 3], u8), $size> = ArrayVec::new();
 
-    for _ in 0..SIZE {
-        let tmp = [
-            (color[0] as f32 + (err_acc[0] as f32 * multiplier)).clamp(0.0, 255.0) as u8,
-            (color[1] as f32 + (err_acc[1] as f32 * multiplier)).clamp(0.0, 255.0) as u8,
-            (color[2] as f32 + (err_acc[2] as f32 * multiplier)).clamp(0.0, 255.0) as u8,
-        ];
+            for _ in 0..$size {
+                let tmp = [
+                    (color[0] as f32 + (err_acc[0] as f32 * multiplier)).clamp(0.0, 255.0) as u8,
+                    (color[1] as f32 + (err_acc[1] as f32 * multiplier)).clamp(0.0, 255.0) as u8,
+                    (color[2] as f32 + (err_acc[2] as f32 * multiplier)).clamp(0.0, 255.0) as u8,
+                ];
 
-        let chosen = color_map.index_of(&Rgb(tmp));
+                let chosen = color_map.index_of(&Rgb(tmp));
 
-        let chosen_c = PALETTE[chosen];
-        candidates.push(chosen_c);
+                let chosen_c = PALETTE[chosen];
+                candidates.push((chosen_c, chosen as u8));
 
-        err_acc[0] = err_acc[0].saturating_add(color[0].saturating_sub(chosen_c[0]));
-        err_acc[1] = err_acc[1].saturating_add(color[1].saturating_sub(chosen_c[1]));
-        err_acc[2] = err_acc[2].saturating_add(color[2].saturating_sub(chosen_c[2]));
-    }
+                err_acc[0] = err_acc[0].saturating_add(color[0].saturating_sub(chosen_c[0]));
+                err_acc[1] = err_acc[1].saturating_add(color[1].saturating_sub(chosen_c[1]));
+                err_acc[2] = err_acc[2].saturating_add(color[2].saturating_sub(chosen_c[2]));
+            }
 
-    candidates.sort_by(|a, b| to_luma(*a).partial_cmp(&to_luma(*b)).unwrap());
+            candidates.sort_by(|a, b| to_luma(a.0).partial_cmp(&to_luma(b.0)).unwrap());
 
-    candidates
+            candidates[pick_idx].1
+        }
+    };
 }
 
+mix_def!(mix_2x2, 4);
+mix_def!(mix_4x4, 16);
+mix_def!(mix_8x8, 64);
+
 pub fn dither(
-    image: &mut RgbImage,
+    image: &RgbImage,
     matrix_size: MatrixSize,
     multiplier: f32,
     color_map: AnsiColorMap<impl DistanceMethod + Send + Sync + Copy>,
-) {
+) -> Vec<u8> {
+    let height = image.height() as usize;
+    let width = image.width() as usize;
+    let mut out: Vec<u8> = vec![0; width as usize * height as usize];
+
     match matrix_size {
-        MatrixSize::Two => image
-            .enumerate_pixels_mut()
-            .par_bridge()
-            .for_each(|(x, y, pixel)| {
-                let mixes = mix::<4>(pixel.0, multiplier, color_map);
-                *pixel = Rgb(mixes[BAYER_2X2[(y as usize % 2) * 2 + (x as usize % 2)]]);
-            }),
-        MatrixSize::Four => image
-            .enumerate_pixels_mut()
-            .par_bridge()
-            .for_each(|(x, y, pixel)| {
-                let mixes = mix::<16>(pixel.0, multiplier, color_map);
-                *pixel = Rgb(mixes[BAYER_4X4[(y as usize % 4) * 4 + (x as usize % 4)]]);
-            }),
-        MatrixSize::Eight => image
-            .enumerate_pixels_mut()
-            .par_bridge()
-            .for_each(|(x, y, pixel)| {
-                let mixes = mix::<64>(pixel.0, multiplier, color_map);
-                *pixel = Rgb(mixes[BAYER_8X8[(y as usize % 8) * 8 + (x as usize % 8)]]);
-            }),
-    }
+        MatrixSize::Two => out.par_iter_mut().enumerate().for_each(|(i, pixel_out)| {
+            let (x, y) = (i % width, i / width);
+            let pixel = image.get_pixel(x as u32, y as u32);
+            *pixel_out = mix_2x2(
+                pixel.0,
+                multiplier,
+                color_map,
+                BAYER_2X2[(y as usize % 2) * 2 + (x as usize % 2)],
+            );
+        }),
+        MatrixSize::Four => out.par_iter_mut().enumerate().for_each(|(i, pixel_out)| {
+            let (x, y) = (i % width, i / width);
+            let pixel = image.get_pixel(x as u32, y as u32);
+            *pixel_out = mix_4x4(
+                pixel.0,
+                multiplier,
+                color_map,
+                BAYER_4X4[(y as usize % 4) * 4 + (x as usize % 4)],
+            );
+        }),
+        MatrixSize::Eight => out.par_iter_mut().enumerate().for_each(|(i, pixel_out)| {
+            let (x, y) = (i % width, i / width);
+            let pixel = image.get_pixel(x as u32, y as u32);
+            *pixel_out = mix_8x8(
+                pixel.0,
+                multiplier,
+                color_map,
+                BAYER_8X8[(y as usize % 8) * 8 + (x as usize % 8)],
+            );
+        }),
+    };
+
+    out
 }

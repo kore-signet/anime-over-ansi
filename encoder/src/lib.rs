@@ -1,6 +1,8 @@
 pub mod ffmpeg;
 pub mod tool_utils;
 pub mod video_encoder;
+#[cfg(feature = "cuda")]
+pub mod cuda;
 
 use std::collections::VecDeque;
 
@@ -117,3 +119,4 @@ impl PacketMapper for PacketCompressor {
         Ok(())
     }
 }
+

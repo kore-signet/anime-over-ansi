@@ -9,6 +9,6 @@ edition = "2021"
 arrayvec = "0.7.2"
 colorful = { path = "../colorful" }
 container = { path = "../container" }
-image = { version = "0.24.2", default-features = false, features = ["rgb"] }
+image = { version = "0.23", default-features = false, features = ["rgb"] }
 itoa = "1.0.2"
 bytes = "1.1.0"
